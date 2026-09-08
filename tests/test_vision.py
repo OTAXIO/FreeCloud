@@ -117,6 +117,33 @@ class VisionTests(unittest.TestCase):
             assert match is not None
             self.assertEqual(match.state, "download_prompt")
 
+    def test_template_specific_scales_override_global_scales(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            pattern = np.zeros((30, 34, 3), dtype=np.uint8)
+            cv2.circle(pattern, (17, 15), 10, (255, 255, 255), 2)
+            cv2.line(pattern, (7, 23), (27, 7), (130, 130, 130), 2)
+            enlarged = cv2.resize(pattern, None, fx=1.3, fy=1.3, interpolation=cv2.INTER_CUBIC)
+            screen = np.zeros((180, 240, 3), dtype=np.uint8)
+            height, width = enlarged.shape[:2]
+            screen[70 : 70 + height, 110 : 110 + width] = enlarged
+            write_png(root / "launcher.png", pattern)
+            settings = Settings(
+                threshold=0.9,
+                template_scales=[1.0],
+                templates={
+                    "launcher_icon": [
+                        TemplateSpec("launcher.png", scales=(1.3,))
+                    ]
+                },
+                config_path=root / "config.json",
+            )
+            match = StateRecognizer(settings).best_match(screen)
+            self.assertIsNotNone(match)
+            assert match is not None
+            self.assertEqual(match.state, "launcher_icon")
+            self.assertEqual(match.center, (110 + width // 2, 70 + height // 2))
+
 
 if __name__ == "__main__":
     unittest.main()

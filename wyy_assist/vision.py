@@ -68,7 +68,8 @@ class StateRecognizer:
         for item in self.templates:
             x, y, width, height = normalized_roi_to_pixels(item.spec.search_roi, gray.shape)
             search = gray[y : y + height, x : x + width]
-            for scale in self.settings.template_scales:
+            scales = item.spec.scales or tuple(self.settings.template_scales)
+            for scale in scales:
                 template = item.image
                 if scale != 1.0:
                     template = cv2.resize(template, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)

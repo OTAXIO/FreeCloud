@@ -132,6 +132,7 @@ Set-Location 'D:\others\TOOLS\wyy_code'
 - `execution_enabled`：`start.py` 是否进入连续点击状态机；当前为 `true`。
 - `threshold`：模板匹配阈值，默认 `0.86`。
 - `template_scales`：多尺度匹配比例。
+- 模板内的 `scales`：仅覆盖该模板的缩放范围；启动图标用它适配桌面图标尺寸。
 - `state_priority`：同帧命中多个状态时的优先级。
 - `template_roi`：先从参考图中裁出真正要识别的按钮，使用归一化坐标。
 - `poll_interval_seconds`：截图轮询间隔。

@@ -41,8 +41,9 @@
     "launcher_icon": [
       {
         "path": "templates/launcher_icon_reference.png",
-        "search_roi": [0.0, 0.05, 1.0, 0.9],
-        "threshold": 0.86
+        "search_roi": [0.04, 0.14, 0.92, 0.68],
+        "threshold": 0.86,
+        "scales": [0.75, 0.9, 1.0, 1.1, 1.2, 1.25, 1.3, 1.35, 1.4, 1.5]
       }
     ],
     "splash_skip": [

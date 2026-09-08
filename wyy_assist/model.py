@@ -29,6 +29,7 @@ class TemplateSpec:
     search_roi: tuple[float, float, float, float] | None = None
     threshold: float | None = None
     template_roi: tuple[float, float, float, float] | None = None
+    scales: tuple[float, ...] | None = None
 
     @staticmethod
     def _read_roi(value: object, name: str) -> tuple[float, float, float, float] | None:
@@ -45,11 +46,20 @@ class TemplateSpec:
 
     @classmethod
     def from_dict(cls, value: dict[str, Any]) -> "TemplateSpec":
+        raw_scales = value.get("scales")
+        scales: tuple[float, ...] | None = None
+        if raw_scales is not None:
+            if not isinstance(raw_scales, (list, tuple)) or not raw_scales:
+                raise ValueError("模板 scales 必须是非空数组")
+            scales = tuple(float(item) for item in raw_scales)
+            if any(item <= 0 for item in scales):
+                raise ValueError("模板 scales 必须全部为正数")
         return cls(
             path=str(value["path"]),
             search_roi=cls._read_roi(value.get("search_roi"), "search_roi"),
             threshold=float(value["threshold"]) if value.get("threshold") is not None else None,
             template_roi=cls._read_roi(value.get("template_roi"), "template_roi"),
+            scales=scales,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -60,6 +70,8 @@ class TemplateSpec:
             result["threshold"] = self.threshold
         if self.template_roi is not None:
             result["template_roi"] = [round(item, 6) for item in self.template_roi]
+        if self.scales is not None:
+            result["scales"] = list(self.scales)
         return result
 
 
