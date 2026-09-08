@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 from wyy_assist.actions import ActionKind, ActionPlanner
-from wyy_assist.automation import StateRetryPolicy, UnknownCenterFallback
+from wyy_assist.automation import AdCyclePhase, AdCycleTimer, StateRetryPolicy, UnknownCenterFallback
 from wyy_assist.executor import ActionExecutor, ExecutionBlocked
 from wyy_assist.model import Match, Settings
 
@@ -77,6 +77,36 @@ class ActionTests(unittest.TestCase):
                 (ActionKind.WAIT, 10.0),
             ],
         )
+
+    def test_ad_cycle_blocks_close_until_both_timers_finish(self) -> None:
+        timer = AdCycleTimer(pre_click_seconds=15.0, post_click_seconds=10.0)
+        timer.arm(100.0)
+
+        self.assertEqual(timer.observe_screen("ad_close", 101.0), "entered")
+        self.assertEqual(timer.phase, AdCyclePhase.PRE_CLICK)
+        self.assertFalse(timer.interaction_due(115.9))
+        self.assertTrue(timer.interaction_due(116.0))
+
+        timer.mark_interaction(116.0)
+        self.assertEqual(timer.phase, AdCyclePhase.POST_CLICK)
+        self.assertFalse(timer.advance_post_click(125.9))
+        self.assertTrue(timer.advance_post_click(126.0))
+        self.assertEqual(timer.phase, AdCyclePhase.EXIT)
+
+    def test_ad_cycle_starts_on_unknown_first_frame_after_ready(self) -> None:
+        timer = AdCycleTimer(pre_click_seconds=15.0, post_click_seconds=10.0)
+        timer.arm(10.0)
+        self.assertEqual(timer.observe_screen(None, 10.7), "entered")
+        self.assertEqual(timer.entered_at, 10.7)
+        self.assertFalse(timer.interaction_due(25.6))
+        self.assertTrue(timer.interaction_due(25.7))
+
+    def test_ad_entry_can_retry_without_starting_timer_while_still_ready(self) -> None:
+        timer = AdCycleTimer(pre_click_seconds=15.0, post_click_seconds=10.0)
+        timer.arm(20.0)
+        self.assertIsNone(timer.observe_screen("ready", 22.9))
+        self.assertEqual(timer.observe_screen("ready", 23.0), "entry-retry")
+        self.assertEqual(timer.phase, AdCyclePhase.IDLE)
 
     def test_download_prompt_clicks_recognized_cancel_center(self) -> None:
         settings = Settings(download_cancel_point=(0.1, 0.1))

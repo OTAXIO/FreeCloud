@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
+from enum import Enum
 
 from .actions import Action, ActionKind, ActionPlanner
 from .adb import AdbClient
@@ -21,6 +22,83 @@ RETRYABLE_STATES = frozenset(
     {"home", "free_listen", "ready", "download_prompt", "landing", "ad_close"}
 )
 UNKNOWN_CENTER_FALLBACK_STATES = frozenset({"ready", "ad_interaction"})
+AD_ENTRY_STATES = frozenset({"ad", "ad_interaction", "ad_close", "download_prompt", "landing"})
+
+
+class AdCyclePhase(str, Enum):
+    IDLE = "idle"
+    AWAITING_ENTRY = "awaiting-entry"
+    PRE_CLICK = "pre-click"
+    POST_CLICK = "post-click"
+    EXIT = "exit"
+
+
+@dataclass
+class AdCycleTimer:
+    """Owns ad timing so visual states cannot bypass either waiting period."""
+
+    pre_click_seconds: float
+    post_click_seconds: float
+    entry_retry_seconds: float = 3.0
+    phase: AdCyclePhase = AdCyclePhase.IDLE
+    armed_at: float | None = None
+    entered_at: float | None = None
+    clicked_at: float | None = None
+
+    def arm(self, now: float) -> None:
+        self.phase = AdCyclePhase.AWAITING_ENTRY
+        self.armed_at = now
+        self.entered_at = None
+        self.clicked_at = None
+
+    def reset(self) -> None:
+        self.phase = AdCyclePhase.IDLE
+        self.armed_at = None
+        self.entered_at = None
+        self.clicked_at = None
+
+    def observe_screen(self, state: str | None, now: float) -> str | None:
+        if self.phase is AdCyclePhase.IDLE and state in AD_ENTRY_STATES:
+            self.phase = AdCyclePhase.PRE_CLICK
+            self.entered_at = now
+            return "entered"
+        if self.phase is not AdCyclePhase.AWAITING_ENTRY:
+            return None
+        if state is None or state in AD_ENTRY_STATES:
+            self.phase = AdCyclePhase.PRE_CLICK
+            self.entered_at = now
+            return "entered"
+        if (
+            state == "ready"
+            and self.armed_at is not None
+            and now - self.armed_at >= self.entry_retry_seconds
+        ):
+            self.reset()
+            return "entry-retry"
+        return None
+
+    def interaction_due(self, now: float) -> bool:
+        return (
+            self.phase is AdCyclePhase.PRE_CLICK
+            and self.entered_at is not None
+            and now - self.entered_at >= self.pre_click_seconds
+        )
+
+    def mark_interaction(self, now: float) -> None:
+        if self.phase is not AdCyclePhase.PRE_CLICK:
+            raise RuntimeError("广告互动点击只能发生在前置计时结束后")
+        self.phase = AdCyclePhase.POST_CLICK
+        self.clicked_at = now
+
+    def advance_post_click(self, now: float) -> bool:
+        if (
+            self.phase is AdCyclePhase.POST_CLICK
+            and self.clicked_at is not None
+            and now - self.clicked_at >= self.post_click_seconds
+        ):
+            self.phase = AdCyclePhase.EXIT
+            return True
+        return False
 
 
 @dataclass
@@ -106,11 +184,65 @@ def run_live(settings: Settings, adb: AdbClient, *, execute_requested: bool) -> 
     transitions = 0
     retry_policy = StateRetryPolicy()
     unknown_fallback = UnknownCenterFallback()
+    ad_cycle = AdCycleTimer(
+        pre_click_seconds=settings.minimum_ad_seconds,
+        post_click_seconds=settings.ad_post_click_wait_seconds,
+    )
+    limit_hits = 0
 
     while transitions < 100:
         screen = adb.screenshot()
         match = recognizer.best_match(screen)
         now = time.monotonic()
+        state = match.state if match is not None else None
+
+        limit_hits = limit_hits + 1 if state == "limit" else 0
+        if limit_hits >= settings.consecutive_hits:
+            return AutomationResult("limit", transitions)
+
+        timer_event = ad_cycle.observe_screen(state, now)
+        if timer_event == "entered":
+            print(
+                f"[计时] 已进入广告页；锁定退出动作，先等待 "
+                f"{settings.minimum_ad_seconds:.1f} 秒"
+            )
+        elif timer_event == "entry-retry":
+            print("[计时] 广告页未出现，允许重新点击入口")
+
+        if ad_cycle.phase is AdCyclePhase.PRE_CLICK:
+            if ad_cycle.interaction_due(now):
+                executor.run(planner.ad_interaction_tap((screen.shape[1], screen.shape[0])))
+                ad_cycle.mark_interaction(time.monotonic())
+                print(
+                    f"[计时] 已完成互动点击；继续锁定退出动作 "
+                    f"{settings.ad_post_click_wait_seconds:.1f} 秒"
+                )
+            time.sleep(settings.poll_interval_seconds)
+            continue
+
+        if ad_cycle.phase is AdCyclePhase.POST_CLICK:
+            if not ad_cycle.advance_post_click(now):
+                time.sleep(settings.poll_interval_seconds)
+                continue
+            print("[计时] 点击后停留已完成；现在允许取消下载、返回或关闭广告")
+            retry_policy = StateRetryPolicy()
+            unknown_fallback.reset()
+
+        if ad_cycle.phase is AdCyclePhase.AWAITING_ENTRY:
+            time.sleep(settings.poll_interval_seconds)
+            continue
+
+        if ad_cycle.phase is AdCyclePhase.EXIT:
+            if state == "ready":
+                ad_cycle.reset()
+                retry_policy = StateRetryPolicy()
+                unknown_fallback.reset()
+            elif state in {"ad", "ad_interaction"}:
+                # The close glyph may need another frame to become recognizable.
+                # Never restart the 15+10 second sequence within the same cycle.
+                time.sleep(settings.poll_interval_seconds)
+                continue
+
         if match is None:
             if unknown_fallback.should_click(tracker.current, now):
                 center = (screen.shape[1] // 2, screen.shape[0] // 2)
@@ -154,6 +286,8 @@ def run_live(settings: Settings, adb: AdbClient, *, execute_requested: bool) -> 
         if not executor.run_all(actions):
             return AutomationResult("limit", transitions)
         retry_policy.record_action(time.monotonic())
+        if match.state == "ready":
+            ad_cycle.arm(time.monotonic())
         time.sleep(settings.poll_interval_seconds)
 
     return AutomationResult("transition-limit", transitions)

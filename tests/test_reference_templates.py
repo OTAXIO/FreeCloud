@@ -14,6 +14,14 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class PackagedReferenceTests(unittest.TestCase):
+    def test_top_ad_close_icon_is_classified_as_close_not_interaction(self) -> None:
+        settings = load_settings(ROOT / "config.json")
+        interaction_paths = {spec.path for spec in settings.templates["ad_interaction"]}
+        close_paths = {spec.path for spec in settings.templates["ad_close"]}
+        path = "templates/ad_interaction_close_reference.png"
+        self.assertNotIn(path, interaction_paths)
+        self.assertIn(path, close_paths)
+
     def test_each_packaged_reference_is_recognized_in_its_search_area(self) -> None:
         settings = load_settings(ROOT / "config.json")
         recognizer = StateRecognizer(settings)

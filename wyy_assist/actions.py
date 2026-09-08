@@ -34,6 +34,13 @@ class ActionPlanner:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
 
+    def ad_interaction_tap(self, screen_size: tuple[int, int]) -> Action:
+        return Action(
+            ActionKind.TAP,
+            "前置计时结束，点击广告测试互动区域",
+            point=_absolute_point(self.settings.ad_interaction_point, screen_size),
+        )
+
     def plan(self, match: Match, screen_size: tuple[int, int]) -> list[Action]:
         width, height = screen_size
         if match.state == "home":
@@ -62,11 +69,7 @@ class ActionPlanner:
                     "从进入广告页开始等待完整前置计时",
                     seconds=self.settings.minimum_ad_seconds,
                 ),
-                Action(
-                    ActionKind.TAP,
-                    "前置计时结束，点击广告测试互动区域",
-                    point=_absolute_point(self.settings.ad_interaction_point, screen_size),
-                ),
+                self.ad_interaction_tap(screen_size),
                 Action(
                     ActionKind.WAIT,
                     "点击后继续停留，完成后才进入退出阶段",
