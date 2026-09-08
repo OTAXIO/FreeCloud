@@ -32,7 +32,7 @@ class ActionExecutor:
     def live(self) -> bool:
         return self.execute_requested and self.settings.execution_enabled
 
-    def verify_live_execution(self) -> None:
+    def verify_input_enabled(self) -> None:
         if not self.execute_requested:
             raise ExecutionBlocked("命令行没有提供 --execute；当前为演练模式")
         if not self.settings.execution_enabled:
@@ -40,19 +40,26 @@ class ActionExecutor:
         package = self.settings.package.strip()
         if not package or package.lower() == "none":
             raise ExecutionBlocked("config.json 的 package 尚未配置；请填写独立测试 APK 的包名")
+
+    def verify_live_execution(self) -> None:
+        self.verify_input_enabled()
+        package = self.settings.package.strip()
         foreground = self.adb.foreground_window()
         if package not in foreground:
             raise ExecutionBlocked(
                 f"前台窗口与配置的测试包不一致；期望 {package}，实际为 {foreground or '未知'}"
             )
 
-    def run(self, action: Action) -> bool:
+    def run(self, action: Action, *, require_target_foreground: bool = True) -> bool:
         prefix = "执行" if self.live else "演练"
         self.output(f"[{prefix}] {action.description}: {self.describe(action)}")
         if not self.live:
             return action.kind is not ActionKind.STOP
 
-        self.verify_live_execution()
+        if require_target_foreground:
+            self.verify_live_execution()
+        else:
+            self.verify_input_enabled()
         if action.kind is ActionKind.TAP:
             assert action.point is not None
             self.adb.tap(*action.point)
@@ -67,9 +74,14 @@ class ActionExecutor:
             return False
         return True
 
-    def run_all(self, actions: Iterable[Action]) -> bool:
+    def run_all(
+        self,
+        actions: Iterable[Action],
+        *,
+        require_target_foreground: bool = True,
+    ) -> bool:
         for action in actions:
-            if not self.run(action):
+            if not self.run(action, require_target_foreground=require_target_foreground):
                 return False
         return True
 

@@ -43,6 +43,10 @@ class ActionPlanner:
 
     def plan(self, match: Match, screen_size: tuple[int, int]) -> list[Action]:
         width, height = screen_size
+        if match.state == "launcher_icon":
+            return [Action(ActionKind.TAP, "点击启动器中的测试应用图标", point=match.center)]
+        if match.state == "splash_skip":
+            return [Action(ActionKind.TAP, "跳过测试应用开屏页", point=match.center)]
         if match.state == "home":
             x1, y1, x2, y2, duration = self.settings.top_menu_swipe
             return [

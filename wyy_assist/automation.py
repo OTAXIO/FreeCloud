@@ -23,6 +23,7 @@ RETRYABLE_STATES = frozenset(
 )
 UNKNOWN_CENTER_FALLBACK_STATES = frozenset({"ready", "ad_interaction"})
 AD_ENTRY_STATES = frozenset({"ad", "ad_interaction", "ad_close", "download_prompt", "landing"})
+STARTUP_STATES = frozenset({"launcher_icon", "splash_skip"})
 
 
 class AdCyclePhase(str, Enum):
@@ -172,6 +173,62 @@ def preview_once(settings: Settings, adb: AdbClient) -> AutomationResult:
     executor = ActionExecutor(settings, adb, execute_requested=False)
     executor.run_all(planner.plan(match, (screen.shape[1], screen.shape[0])))
     return AutomationResult(match.state, 1)
+
+
+def run_startup_navigation(
+    settings: Settings,
+    adb: AdbClient,
+    *,
+    execute_requested: bool,
+) -> AutomationResult:
+    """Open the test app from the launcher and dismiss an optional splash page."""
+
+    executor = ActionExecutor(settings, adb, execute_requested=execute_requested)
+    executor.verify_input_enabled()
+    recognizer = StateRecognizer(settings)
+    planner = ActionPlanner(settings)
+    tracker = StableStateTracker(settings.consecutive_hits)
+    deadline = time.monotonic() + settings.startup_navigation_timeout_seconds
+    transitions = 0
+    action_state: str | None = None
+    action_count = 0
+    last_action_at: float | None = None
+
+    while time.monotonic() < deadline:
+        screen = adb.screenshot()
+        match = recognizer.best_match(screen)
+        transition = tracker.observe(match.state if match is not None else None)
+        if match is None or transition is None:
+            time.sleep(settings.poll_interval_seconds)
+            continue
+
+        if transition.changed:
+            transitions += 1
+            action_state = match.state
+            action_count = 0
+            last_action_at = None
+
+        if match.state not in STARTUP_STATES:
+            print(f"[启动] 已进入原状态机页面: {match.state}")
+            return AutomationResult(f"startup-{match.state}", transitions)
+
+        now = time.monotonic()
+        retry_due = last_action_at is None or now - last_action_at >= 3.0
+        if retry_due and action_count < 3:
+            actions = planner.plan(match, (screen.shape[1], screen.shape[0]))
+            executor.run_all(actions, require_target_foreground=False)
+            action_state = match.state
+            action_count += 1
+            last_action_at = time.monotonic()
+        elif action_state == match.state and action_count >= 3 and retry_due:
+            raise RuntimeError(f"启动页面 {match.state} 连续点击 3 次后仍未变化")
+
+        time.sleep(settings.poll_interval_seconds)
+
+    raise RuntimeError(
+        f"启动导航超过 {settings.startup_navigation_timeout_seconds:.1f} 秒，"
+        "未识别到应用图标、跳过按钮或原状态机页面"
+    )
 
 
 def run_live(settings: Settings, adb: AdbClient, *, execute_requested: bool) -> AutomationResult:

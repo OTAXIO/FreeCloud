@@ -42,6 +42,8 @@ class PackagedReferenceTests(unittest.TestCase):
         settings = load_settings(ROOT / "config.json")
         recognizer = StateRecognizer(settings)
         placements = {
+            "launcher_icon": (100, 400),
+            "splash_skip": (950, 80),
             "home": (300, 100),
             "free_listen": (550, 100),
             "ready": (345, 1122),

@@ -1,12 +1,18 @@
 {
   "adb_path": "D:\\others\\TOOLS\\platform-tools\\adb.exe",
   "serial": "",
+  "emulator_path": "D:\\Basement\\leidian\\LDPlayer9\\dnplayer.exe",
+  "emulator_index": 0,
+  "emulator_start_timeout_seconds": 180.0,
+  "startup_navigation_timeout_seconds": 90.0,
+  "close_emulator_on_limit": true,
   "package": "com.netease.cloudmusic",
   "deep_link": "",
   "threshold": 0.86,
   "template_scales": [0.9, 0.95, 1.0, 1.05, 1.1],
   "state_priority": [
     "limit",
+    "splash_skip",
     "success",
     "download_prompt",
     "ad_close",
@@ -15,7 +21,8 @@
     "ready",
     "free_listen",
     "landing",
-    "home"
+    "home",
+    "launcher_icon"
   ],
   "poll_interval_seconds": 0.7,
   "consecutive_hits": 2,
@@ -29,6 +36,20 @@
   "ad_interaction_point": [0.5, 0.5],
   "download_cancel_point": [0.59, 0.57],
   "templates": {
+    "launcher_icon": [
+      {
+        "path": "templates/launcher_icon_reference.png",
+        "search_roi": [0.0, 0.05, 1.0, 0.9],
+        "threshold": 0.86
+      }
+    ],
+    "splash_skip": [
+      {
+        "path": "templates/splash_skip_reference.png",
+        "search_roi": [0.65, 0.0, 0.35, 0.25],
+        "threshold": 0.82
+      }
+    ],
     "home": [
       {
         "path": "templates/home_reference.png",

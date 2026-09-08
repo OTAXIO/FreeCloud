@@ -52,6 +52,30 @@ class ActionTests(unittest.TestCase):
         self.assertTrue(executor.run_all(actions))
         self.assertEqual(adb.calls, [("tap", 123, 456)])
 
+    def test_launcher_and_splash_actions_click_recognized_centers(self) -> None:
+        planner = ActionPlanner(Settings())
+        launcher = planner.plan(match("launcher_icon", (120, 420)), (1080, 1920))
+        splash = planner.plan(match("splash_skip", (1018, 80)), (1080, 1920))
+        self.assertEqual(launcher[0].point, (120, 420))
+        self.assertEqual(splash[0].point, (1018, 80))
+
+    def test_launcher_bootstrap_can_tap_before_target_is_foreground(self) -> None:
+        settings = Settings(package="com.example.school.mockads", execution_enabled=True)
+        adb = FakeAdb("com.android.launcher3/.Launcher")
+        executor = ActionExecutor(
+            settings,
+            adb,
+            execute_requested=True,
+            sleeper=lambda _: None,
+            output=lambda _: None,
+        )
+        action = ActionPlanner(settings).plan(
+            match("launcher_icon", (120, 420)),
+            (1080, 1920),
+        )[0]
+        self.assertTrue(executor.run(action, require_target_foreground=False))
+        self.assertEqual(adb.calls, [("tap", 120, 420)])
+
     def test_foreground_must_match_configured_test_package(self) -> None:
         settings = Settings(package="com.example.school.mockads", execution_enabled=True)
         adb = FakeAdb("com.example.other/.MainActivity")

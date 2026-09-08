@@ -26,31 +26,44 @@ class StartTests(unittest.TestCase):
 
     @patch("start.load_settings")
     @patch("start.AdbClient")
+    @patch("start.EmulatorController")
     @patch("start.preview_once")
+    @patch("start.run_startup_navigation")
     @patch("start.run_live")
     def test_unconfigured_default_previews_even_when_execution_is_enabled(
         self,
         run_live: Mock,
+        run_startup_navigation: Mock,
         preview_once: Mock,
+        emulator_controller: Mock,
         adb_client: Mock,
         load_settings: Mock,
     ) -> None:
         load_settings.return_value = Settings(package="none", execution_enabled=True)
-        adb_client.return_value.ensure_device.return_value = "emulator-5554"
+        emulator_controller.return_value.wait_for_frame.return_value = (
+            "emulator-5554",
+            Mock(),
+        )
         preview_once.return_value = AutomationResult("unknown", 0)
 
         self.assertEqual(start.run(start.DEFAULT_CONFIG), 0)
         preview_once.assert_called_once()
+        run_startup_navigation.assert_not_called()
         run_live.assert_not_called()
+        emulator_controller.return_value.close.assert_not_called()
 
     @patch("start.load_settings")
     @patch("start.AdbClient")
+    @patch("start.EmulatorController")
     @patch("start.preview_once")
+    @patch("start.run_startup_navigation")
     @patch("start.run_live")
     def test_configured_package_runs_the_continuous_state_machine(
         self,
         run_live: Mock,
+        run_startup_navigation: Mock,
         preview_once: Mock,
+        emulator_controller: Mock,
         adb_client: Mock,
         load_settings: Mock,
     ) -> None:
@@ -58,16 +71,28 @@ class StartTests(unittest.TestCase):
             package="com.example.school.mockads",
             execution_enabled=True,
         )
-        adb_client.return_value.ensure_device.return_value = "emulator-5554"
+        emulator_controller.return_value.wait_for_frame.return_value = (
+            "emulator-5554",
+            Mock(),
+        )
         run_live.return_value = AutomationResult("limit", 8)
 
         self.assertEqual(start.run(start.DEFAULT_CONFIG), 0)
+        run_startup_navigation.assert_called_once_with(
+            load_settings.return_value,
+            adb_client.return_value,
+            execute_requested=True,
+        )
         run_live.assert_called_once_with(
             load_settings.return_value,
             adb_client.return_value,
             execute_requested=True,
         )
         preview_once.assert_not_called()
+        emulator_controller.return_value.launch_if_needed.assert_called_once_with(
+            adb_client.return_value
+        )
+        emulator_controller.return_value.close.assert_called_once_with()
 
 
 if __name__ == "__main__":

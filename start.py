@@ -6,8 +6,9 @@ import sys
 from pathlib import Path
 
 from wyy_assist.adb import AdbClient, AdbError
-from wyy_assist.automation import preview_once, run_live
+from wyy_assist.automation import preview_once, run_live, run_startup_navigation
 from wyy_assist.config import load_settings
+from wyy_assist.emulator import EmulatorController, EmulatorError
 from wyy_assist.executor import ExecutionBlocked
 
 # com.netease.cloudmusic
@@ -38,11 +39,13 @@ def build_parser() -> argparse.ArgumentParser:
 def run(config_path: Path) -> int:
     settings = load_settings(config_path)
     adb = AdbClient(settings.adb_path, settings.serial)
+    emulator = EmulatorController(settings)
 
     print(f"配置文件：{config_path}")
     print(f"目标包名：{settings.package}")
     print(f"点击开关：{'开启' if settings.execution_enabled else '关闭'}")
-    device = adb.ensure_device()
+    emulator.launch_if_needed(adb)
+    device, _ = emulator.wait_for_frame(adb)
     print(f"ADB 设备：{device}")
 
     if not package_is_configured(settings.package):
@@ -54,8 +57,12 @@ def run(config_path: Path) -> int:
         print("若要测试连续点击，请在 config.json 中启用 execution_enabled。\n")
         result = preview_once(settings, adb)
     else:
-        print("\n测试点击已开启，启动连续状态机。按 Ctrl+C 可随时停止。\n")
+        print("\n测试点击已开启，先执行启动识别，再进入连续状态机。按 Ctrl+C 可随时停止。\n")
+        run_startup_navigation(settings, adb, execute_requested=True)
         result = run_live(settings, adb, execute_requested=True)
+
+    if result.reason == "limit" and settings.close_emulator_on_limit:
+        emulator.close()
 
     print(f"\n程序结束：{result.reason}；状态转换 {result.transitions} 次")
     return 0
@@ -70,7 +77,7 @@ def main(argv: list[str] | None = None) -> int:
     except KeyboardInterrupt:
         print("\n已由用户停止。")
         code = 130
-    except (AdbError, ExecutionBlocked, FileNotFoundError, ValueError, RuntimeError) as exc:
+    except (AdbError, EmulatorError, ExecutionBlocked, FileNotFoundError, ValueError, RuntimeError) as exc:
         print(f"\n启动失败：{exc}", file=sys.stderr)
         code = 2
     finally:

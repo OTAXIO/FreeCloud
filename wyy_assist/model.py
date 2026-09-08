@@ -6,6 +6,8 @@ from typing import Any
 
 
 VALID_STATES = (
+    "launcher_icon",
+    "splash_skip",
     "home",
     "free_listen",
     "ready",
@@ -63,6 +65,11 @@ class TemplateSpec:
 class Settings:
     adb_path: str = r"D:\others\TOOLS\platform-tools\adb.exe"
     serial: str = ""
+    emulator_path: str = ""
+    emulator_index: int = 0
+    emulator_start_timeout_seconds: float = 180.0
+    startup_navigation_timeout_seconds: float = 90.0
+    close_emulator_on_limit: bool = True
     package: str = "none"
     deep_link: str = ""
     threshold: float = 0.86
@@ -70,6 +77,7 @@ class Settings:
     state_priority: list[str] = field(
         default_factory=lambda: [
             "limit",
+            "splash_skip",
             "success",
             "download_prompt",
             "ad_close",
@@ -79,6 +87,7 @@ class Settings:
             "free_listen",
             "landing",
             "home",
+            "launcher_icon",
         ]
     )
     poll_interval_seconds: float = 0.7
@@ -107,6 +116,11 @@ class Settings:
         settings = cls(
             adb_path=str(value.get("adb_path", cls.adb_path)),
             serial=str(value.get("serial", "")),
+            emulator_path=str(value.get("emulator_path", "")),
+            emulator_index=int(value.get("emulator_index", 0)),
+            emulator_start_timeout_seconds=float(value.get("emulator_start_timeout_seconds", 180.0)),
+            startup_navigation_timeout_seconds=float(value.get("startup_navigation_timeout_seconds", 90.0)),
+            close_emulator_on_limit=bool(value.get("close_emulator_on_limit", True)),
             package=str(value.get("package", "none")),
             deep_link=str(value.get("deep_link", "")),
             threshold=float(value.get("threshold", 0.86)),
@@ -141,6 +155,12 @@ class Settings:
             raise ValueError(f"state_priority 含未知状态: {sorted(unknown_priorities)}")
         if self.poll_interval_seconds <= 0:
             raise ValueError("poll_interval_seconds 必须大于 0")
+        if self.emulator_index < 0:
+            raise ValueError("emulator_index 不能为负数")
+        if self.emulator_start_timeout_seconds <= 0:
+            raise ValueError("emulator_start_timeout_seconds 必须大于 0")
+        if self.startup_navigation_timeout_seconds <= 0:
+            raise ValueError("startup_navigation_timeout_seconds 必须大于 0")
         if self.consecutive_hits < 1:
             raise ValueError("consecutive_hits 必须至少为 1")
         if self.minimum_ad_seconds < 0:
@@ -171,6 +191,11 @@ class Settings:
         return {
             "adb_path": self.adb_path,
             "serial": self.serial,
+            "emulator_path": self.emulator_path,
+            "emulator_index": self.emulator_index,
+            "emulator_start_timeout_seconds": self.emulator_start_timeout_seconds,
+            "startup_navigation_timeout_seconds": self.startup_navigation_timeout_seconds,
+            "close_emulator_on_limit": self.close_emulator_on_limit,
             "package": self.package,
             "deep_link": self.deep_link,
             "threshold": self.threshold,
