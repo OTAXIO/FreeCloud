@@ -22,6 +22,22 @@ class PackagedReferenceTests(unittest.TestCase):
         self.assertNotIn(path, interaction_paths)
         self.assertIn(path, close_paths)
 
+    def test_ready_button_is_not_misclassified_as_limit_text(self) -> None:
+        settings = load_settings(ROOT / "config.json")
+        settings.templates = {"limit": settings.templates["limit"]}
+        settings.state_priority = ["limit"]
+        recognizer = StateRecognizer(settings)
+        ready = cv2.imdecode(
+            np.fromfile(ROOT / "templates" / "ready_reference.png", dtype=np.uint8),
+            cv2.IMREAD_COLOR,
+        )
+        self.assertIsNotNone(ready)
+        assert ready is not None
+        screen = np.zeros((1920, 1080, 3), dtype=np.uint8)
+        height, width = ready.shape[:2]
+        screen[1122 : 1122 + height, 345 : 345 + width] = ready
+        self.assertIsNone(recognizer.best_match(screen))
+
     def test_each_packaged_reference_is_recognized_in_its_search_area(self) -> None:
         settings = load_settings(ROOT / "config.json")
         recognizer = StateRecognizer(settings)
