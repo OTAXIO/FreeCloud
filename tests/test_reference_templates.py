@@ -33,6 +33,7 @@ class PackagedReferenceTests(unittest.TestCase):
             "download_prompt": (70, 900),
             "landing": (50, 20),
             "ad_close": (470, 1415),
+            "limit": (150, 800),
         }
         for state, (x, y) in placements.items():
             with self.subTest(state=state):

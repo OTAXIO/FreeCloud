@@ -1,7 +1,7 @@
 {
   "adb_path": "D:\\others\\TOOLS\\platform-tools\\adb.exe",
   "serial": "",
-  "package": "none",
+  "package": "com.netease.cloudmusic",
   "deep_link": "",
   "threshold": 0.86,
   "template_scales": [0.9, 0.95, 1.0, 1.05, 1.1],
@@ -77,6 +77,14 @@
       {
         "path": "templates/ad_close_reference.png",
         "search_roi": [0.3, 0.62, 0.4, 0.28]
+      }
+    ],
+    "limit": [
+      {
+        "path": "templates/limit_reference.png",
+        "search_roi": [0.1, 0.35, 0.8, 0.45],
+        "threshold": 0.82,
+        "template_roi": [0.27, 0.73, 0.46, 0.19]
       }
     ]
   }

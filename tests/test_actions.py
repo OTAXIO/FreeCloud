@@ -124,6 +124,12 @@ class ActionTests(unittest.TestCase):
         self.assertEqual(actions[0].kind, ActionKind.BACK)
         self.assertIsNone(actions[0].point)
 
+    def test_limit_state_stops_without_any_click(self) -> None:
+        actions = ActionPlanner(Settings()).plan(match("limit", (540, 960)), (1080, 1920))
+        self.assertEqual(len(actions), 1)
+        self.assertEqual(actions[0].kind, ActionKind.STOP)
+        self.assertIsNone(actions[0].point)
+
     def test_ready_state_retries_three_total_attempts_then_stalls(self) -> None:
         policy = StateRetryPolicy(retry_after_seconds=3.0, max_attempts=3)
         policy.begin("ready")
