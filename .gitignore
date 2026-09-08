@@ -1,0 +1,6 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+debug/
+templates/*_20*.png
+session.json

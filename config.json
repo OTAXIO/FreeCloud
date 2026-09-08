@@ -1,0 +1,79 @@
+{
+  "adb_path": "D:\\others\\TOOLS\\platform-tools\\adb.exe",
+  "serial": "",
+  "package": "none",
+  "deep_link": "",
+  "threshold": 0.86,
+  "template_scales": [0.9, 0.95, 1.0, 1.05, 1.1],
+  "state_priority": [
+    "limit",
+    "success",
+    "download_prompt",
+    "ad_close",
+    "ad_interaction",
+    "ad",
+    "ready",
+    "free_listen",
+    "landing",
+    "home"
+  ],
+  "poll_interval_seconds": 0.7,
+  "consecutive_hits": 2,
+  "minimum_ad_seconds": 17.0,
+  "daily_success_target": 2,
+  "expected_ad_entries": 10,
+  "unknown_timeout_seconds": 30.0,
+  "execution_enabled": false,
+  "ad_post_click_wait_seconds": 10.0,
+  "top_menu_swipe": [0.85, 0.08, 0.25, 0.08, 450],
+  "ad_interaction_point": [0.5, 0.5],
+  "download_cancel_point": [0.59, 0.57],
+  "templates": {
+    "home": [
+      {
+        "path": "templates/home_reference.png",
+        "search_roi": [0.2, 0.03, 0.35, 0.12]
+      }
+    ],
+    "free_listen": [
+      {
+        "path": "templates/free_listen_reference.png",
+        "search_roi": [0.4, 0.03, 0.4, 0.12]
+      }
+    ],
+    "ready": [
+      {
+        "path": "templates/ready_reference.png",
+        "search_roi": [0.2, 0.48, 0.6, 0.25]
+      }
+    ],
+    "ad_interaction": [
+      {
+        "path": "templates/ad_interaction_reference.png",
+        "search_roi": [0.0, 0.02, 0.65, 0.18]
+      },
+      {
+        "path": "templates/ad_interaction_close_reference.png",
+        "search_roi": [0.78, 0.02, 0.22, 0.2]
+      }
+    ],
+    "download_prompt": [
+      {
+        "path": "templates/download_prompt_reference.png",
+        "search_roi": [0.02, 0.38, 0.96, 0.3]
+      }
+    ],
+    "landing": [
+      {
+        "path": "templates/landing_reference.png",
+        "search_roi": [0.0, 0.0, 0.8, 0.18]
+      }
+    ],
+    "ad_close": [
+      {
+        "path": "templates/ad_close_reference.png",
+        "search_roi": [0.3, 0.62, 0.4, 0.28]
+      }
+    ]
+  }
+}
