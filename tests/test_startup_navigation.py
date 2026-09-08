@@ -6,8 +6,8 @@ from unittest.mock import Mock, patch
 
 import numpy as np
 
-from wyy_assist.automation import run_startup_navigation
-from wyy_assist.model import Match, Settings
+from wyy_assist.automation import run_startup_navigation, runtime_recognition_states
+from wyy_assist.model import Match, Settings, TemplateSpec
 
 
 class StartupAdb:
@@ -26,6 +26,17 @@ def match(state: str, center: tuple[int, int]) -> Match:
 
 
 class StartupNavigationTests(unittest.TestCase):
+    def test_main_state_machine_excludes_launcher_and_splash_states(self) -> None:
+        settings = Settings(
+            templates={
+                "launcher_icon": [TemplateSpec("launcher.png")],
+                "splash_skip": [TemplateSpec("skip.png")],
+                "home": [TemplateSpec("home.png")],
+                "ready": [TemplateSpec("ready.png")],
+            }
+        )
+        self.assertEqual(runtime_recognition_states(settings), {"home", "ready"})
+
     @patch("wyy_assist.automation.time.sleep", return_value=None)
     @patch("wyy_assist.automation.StateRecognizer")
     def test_clicks_launcher_then_skip_and_hands_off_to_original_state_machine(

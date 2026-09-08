@@ -41,6 +41,21 @@ class ActionPlanner:
             point=_absolute_point(self.settings.ad_interaction_point, screen_size),
         )
 
+    @staticmethod
+    def free_listen_page_scroll(screen_size: tuple[int, int]) -> Action:
+        width, height = screen_size
+        return Action(
+            ActionKind.SWIPE,
+            "向下滚动免费听页面（手势向上），使拼图入口进入识别区域",
+            swipe=(
+                round(0.5 * width),
+                round(0.82 * height),
+                round(0.5 * width),
+                round(0.28 * height),
+                550,
+            ),
+        )
+
     def plan(self, match: Match, screen_size: tuple[int, int]) -> list[Action]:
         width, height = screen_size
         if match.state == "launcher_icon":
@@ -79,21 +94,13 @@ class ActionPlanner:
         if match.state == "free_listen":
             return [Action(ActionKind.TAP, "点击免费听频道", point=match.center)]
         if match.state == "free_listen_icon":
-            return [Action(ActionKind.TAP, "未找到顶部频道，点击识别到的“免”入口", point=match.center)]
-        if match.state == "free_listen_page":
             return [
-                Action(
-                    ActionKind.SWIPE,
-                    "向上滑动免费听页面，使下方拼图入口进入识别区域",
-                    swipe=(
-                        round(0.5 * width),
-                        round(0.82 * height),
-                        round(0.5 * width),
-                        round(0.28 * height),
-                        550,
-                    ),
-                )
+                Action(ActionKind.TAP, "未找到顶部频道，点击识别到的“免”入口", point=match.center),
+                Action(ActionKind.WAIT, "等待免费听页面打开", seconds=2.0),
+                self.free_listen_page_scroll(screen_size),
             ]
+        if match.state == "free_listen_page":
+            return [self.free_listen_page_scroll(screen_size)]
         if match.state == "ready":
             return [Action(ActionKind.TAP, "点击看视频、点亮拼图入口", point=match.center)]
         if match.state in {"ad", "ad_interaction"}:

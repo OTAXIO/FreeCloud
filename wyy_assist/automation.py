@@ -35,6 +35,12 @@ AD_ENTRY_STATES = frozenset({"ad", "ad_interaction", "ad_close", "download_promp
 STARTUP_STATES = frozenset({"launcher_icon", "splash_skip"})
 
 
+def runtime_recognition_states(settings: Settings) -> set[str]:
+    """Main automation must never reuse launcher-only recognition states."""
+
+    return set(settings.templates).difference(STARTUP_STATES)
+
+
 class AdCyclePhase(str, Enum):
     IDLE = "idle"
     AWAITING_ENTRY = "awaiting-entry"
@@ -244,6 +250,7 @@ def run_live(settings: Settings, adb: AdbClient, *, execute_requested: bool) -> 
     executor = ActionExecutor(settings, adb, execute_requested=execute_requested)
     executor.verify_live_execution()
     recognizer = StateRecognizer(settings)
+    runtime_states = runtime_recognition_states(settings)
     planner = ActionPlanner(settings)
     tracker = StableStateTracker(settings.consecutive_hits)
     last_known_at = time.monotonic()
@@ -258,7 +265,7 @@ def run_live(settings: Settings, adb: AdbClient, *, execute_requested: bool) -> 
 
     while transitions < 100:
         screen = adb.screenshot()
-        match = recognizer.best_match(screen)
+        match = recognizer.best_match(screen, allowed_states=runtime_states)
         if (
             match is not None
             and match.state == "home"

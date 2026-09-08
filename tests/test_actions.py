@@ -99,8 +99,13 @@ class ActionTests(unittest.TestCase):
             match("free_listen_icon", (160, 760)),
             (1080, 1920),
         )
-        self.assertEqual(actions[0].kind, ActionKind.TAP)
+        self.assertEqual(
+            [action.kind for action in actions],
+            [ActionKind.TAP, ActionKind.WAIT, ActionKind.SWIPE],
+        )
         self.assertEqual(actions[0].point, (160, 760))
+        self.assertEqual(actions[1].seconds, 2.0)
+        self.assertEqual(actions[2].swipe, (540, 1574, 540, 538, 550))
 
     def test_free_listen_page_scrolls_toward_lower_puzzle_section(self) -> None:
         actions = ActionPlanner(Settings()).plan(
