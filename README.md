@@ -91,6 +91,9 @@ Set-Location 'D:\others\TOOLS\wyy_code'
 `download_prompt`、`landing`、`ad_close` 和 `limit`。模板搜索区域和优先级位于
 `config.json`；滚动后的拼图按钮有一份独立 `ready` 模板，不改变原模板。
 
+第一次完成推荐菜单点击和频道栏滑动后，如果画面仍稳定识别为 `home`，状态机会单独
+检查右上角“免”图标；该图标使用独立缩放范围，不会再被优先级更高的“推荐”文字遮盖。
+
 测试 APK 画面与现有参考图不同时，应重新校准：
 
 ```powershell

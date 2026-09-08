@@ -59,7 +59,7 @@ class PackagedReferenceTests(unittest.TestCase):
             "splash_skip": (950, 80),
             "home": (300, 100),
             "free_listen": (550, 100),
-            "free_listen_icon": (100, 400),
+            "free_listen_icon": (800, 100),
             "free_listen_page": (0, 0),
             "ready": (345, 1122),
             "ad_interaction": (42, 118),

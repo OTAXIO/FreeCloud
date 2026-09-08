@@ -144,6 +144,37 @@ class VisionTests(unittest.TestCase):
             self.assertEqual(match.state, "launcher_icon")
             self.assertEqual(match.center, (110 + width // 2, 70 + height // 2))
 
+    def test_allowed_states_can_reveal_lower_priority_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            screen = np.zeros((180, 240, 3), dtype=np.uint8)
+            home = np.zeros((24, 32, 3), dtype=np.uint8)
+            fallback = np.zeros((26, 30, 3), dtype=np.uint8)
+            cv2.rectangle(home, (2, 2), (29, 21), (255, 255, 255), 2)
+            cv2.line(home, (4, 20), (27, 4), (120, 120, 120), 2)
+            cv2.circle(fallback, (15, 13), 10, (255, 255, 255), 2)
+            cv2.line(fallback, (7, 20), (23, 6), (130, 130, 130), 2)
+            screen[30:54, 40:72] = home
+            screen[90:116, 150:180] = fallback
+            write_png(root / "home.png", home)
+            write_png(root / "fallback.png", fallback)
+            settings = Settings(
+                threshold=0.9,
+                template_scales=[1.0],
+                state_priority=["home", "free_listen_icon"],
+                templates={
+                    "home": [TemplateSpec("home.png")],
+                    "free_listen_icon": [TemplateSpec("fallback.png")],
+                },
+                config_path=root / "config.json",
+            )
+            recognizer = StateRecognizer(settings)
+            self.assertEqual(recognizer.best_match(screen).state, "home")
+            match = recognizer.best_match(screen, allowed_states={"free_listen_icon"})
+            self.assertIsNotNone(match)
+            assert match is not None
+            self.assertEqual(match.state, "free_listen_icon")
+
 
 if __name__ == "__main__":
     unittest.main()

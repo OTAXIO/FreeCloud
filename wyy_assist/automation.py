@@ -259,6 +259,19 @@ def run_live(settings: Settings, adb: AdbClient, *, execute_requested: bool) -> 
     while transitions < 100:
         screen = adb.screenshot()
         match = recognizer.best_match(screen)
+        if (
+            match is not None
+            and match.state == "home"
+            and retry_policy.state == "home"
+            and retry_policy.attempts >= 1
+        ):
+            fallback = recognizer.best_match(
+                screen,
+                allowed_states={"free_listen_icon"},
+            )
+            if fallback is not None:
+                print("[导航] 顶部频道滑动后仍停留在推荐页，改用右上角“免”入口")
+                match = fallback
         now = time.monotonic()
         state = match.state if match is not None else None
 

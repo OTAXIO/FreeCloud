@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Collection
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -60,12 +61,18 @@ class StateRecognizer:
                     image = image[y : y + height, x : x + width].copy()
                 self.templates.append(LoadedTemplate(state, spec, path, image))
 
-    def best_match(self, screen: np.ndarray) -> Match | None:
+    def best_match(
+        self,
+        screen: np.ndarray,
+        allowed_states: Collection[str] | None = None,
+    ) -> Match | None:
         if screen.size == 0:
             raise ValueError("截图为空")
         gray = cv2.cvtColor(screen, cv2.COLOR_BGR2GRAY) if screen.ndim == 3 else screen
         matches: dict[str, Match] = {}
         for item in self.templates:
+            if allowed_states is not None and item.state not in allowed_states:
+                continue
             x, y, width, height = normalized_roi_to_pixels(item.spec.search_roi, gray.shape)
             search = gray[y : y + height, x : x + width]
             scales = item.spec.scales or tuple(self.settings.template_scales)
