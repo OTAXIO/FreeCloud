@@ -83,7 +83,7 @@ class Settings:
     )
     poll_interval_seconds: float = 0.7
     consecutive_hits: int = 2
-    minimum_ad_seconds: float = 8.0
+    minimum_ad_seconds: float = 15.0
     daily_success_target: int = 2
     expected_ad_entries: int = 10
     unknown_timeout_seconds: float = 30.0
@@ -114,7 +114,7 @@ class Settings:
             state_priority=[str(item) for item in value.get("state_priority", cls().state_priority)],
             poll_interval_seconds=float(value.get("poll_interval_seconds", 0.7)),
             consecutive_hits=int(value.get("consecutive_hits", 2)),
-            minimum_ad_seconds=float(value.get("minimum_ad_seconds", 8.0)),
+            minimum_ad_seconds=float(value.get("minimum_ad_seconds", 15.0)),
             daily_success_target=int(value.get("daily_success_target", 2)),
             expected_ad_entries=int(value.get("expected_ad_entries", 10)),
             unknown_timeout_seconds=float(value.get("unknown_timeout_seconds", 30.0)),

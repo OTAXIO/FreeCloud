@@ -40,8 +40,8 @@ Set-Location 'D:\others\TOOLS\wyy_code'
 1. `home`：向左滑动顶部频道栏。
 2. `free_listen`：点击识别到的目标频道。
 3. `ready`：点击识别到的测试入口。
-4. `ad_interaction`：等待 `minimum_ad_seconds`，点击配置的互动点，再等待
-   `ad_post_click_wait_seconds`。
+4. `ad_interaction`：从广告页开始计时，先等待 `minimum_ad_seconds`，点击配置的
+   互动点，再等待 `ad_post_click_wait_seconds`；两段计时完成后才处理退出。
 5. `download_prompt`：只匹配“取消”按钮并点击识别中心。
 6. `landing`：只匹配左上角返回箭头，然后发送 Android 返回键。
 7. `ad_close`：点击识别到的关闭按钮。
@@ -117,7 +117,7 @@ Set-Location 'D:\others\TOOLS\wyy_code'
 - `template_roi`：先从参考图中裁出真正要识别的按钮，使用归一化坐标。
 - `poll_interval_seconds`：截图轮询间隔。
 - `consecutive_hits`：确认状态所需的连续命中帧数。
-- `minimum_ad_seconds`：互动前等待时间，当前为 17 秒。
+- `minimum_ad_seconds`：进入广告页后的互动前等待时间，当前为 15 秒。
 - `ad_post_click_wait_seconds`：互动后等待时间，当前为 10 秒。
 - `unknown_timeout_seconds`：持续无法识别后的停止时间。
 - `ad_interaction_point`：广告测试互动点的归一化坐标。

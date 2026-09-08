@@ -19,7 +19,7 @@
   ],
   "poll_interval_seconds": 0.7,
   "consecutive_hits": 2,
-  "minimum_ad_seconds": 17.0,
+  "minimum_ad_seconds": 15.0,
   "daily_success_target": 2,
   "expected_ad_entries": 10,
   "unknown_timeout_seconds": 30.0,

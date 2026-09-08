@@ -59,13 +59,24 @@ class ActionTests(unittest.TestCase):
         with self.assertRaisesRegex(ExecutionBlocked, "不一致"):
             executor.verify_live_execution()
 
-    def test_ad_plan_contains_17s_tap_and_10s_wait(self) -> None:
-        settings = Settings(minimum_ad_seconds=17.0, ad_post_click_wait_seconds=10.0)
+    def test_ad_plan_contains_15s_tap_and_10s_wait(self) -> None:
+        settings = Settings(minimum_ad_seconds=15.0, ad_post_click_wait_seconds=10.0)
         actions = ActionPlanner(settings).plan(match("ad_interaction"), (1080, 1920))
         self.assertEqual([action.kind for action in actions], [ActionKind.WAIT, ActionKind.TAP, ActionKind.WAIT])
-        self.assertEqual(actions[0].seconds, 17.0)
+        self.assertEqual(actions[0].seconds, 15.0)
         self.assertEqual(actions[1].point, (540, 960))
         self.assertEqual(actions[2].seconds, 10.0)
+
+    def test_default_ad_timing_is_15s_then_click_then_10s(self) -> None:
+        actions = ActionPlanner(Settings()).plan(match("ad_interaction"), (1080, 1920))
+        self.assertEqual(
+            [(action.kind, action.seconds) for action in actions],
+            [
+                (ActionKind.WAIT, 15.0),
+                (ActionKind.TAP, 0.0),
+                (ActionKind.WAIT, 10.0),
+            ],
+        )
 
     def test_download_prompt_clicks_recognized_cancel_center(self) -> None:
         settings = Settings(download_cancel_point=(0.1, 0.1))

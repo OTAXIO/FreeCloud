@@ -57,13 +57,21 @@ class ActionPlanner:
             return [Action(ActionKind.TAP, "点击看视频、点亮拼图入口", point=match.center)]
         if match.state in {"ad", "ad_interaction"}:
             return [
-                Action(ActionKind.WAIT, "等待广告测试的前置计时", seconds=self.settings.minimum_ad_seconds),
+                Action(
+                    ActionKind.WAIT,
+                    "从进入广告页开始等待完整前置计时",
+                    seconds=self.settings.minimum_ad_seconds,
+                ),
                 Action(
                     ActionKind.TAP,
-                    "点击测试广告的互动区域",
+                    "前置计时结束，点击广告测试互动区域",
                     point=_absolute_point(self.settings.ad_interaction_point, screen_size),
                 ),
-                Action(ActionKind.WAIT, "等待点击后的测试计时", seconds=self.settings.ad_post_click_wait_seconds),
+                Action(
+                    ActionKind.WAIT,
+                    "点击后继续停留，完成后才进入退出阶段",
+                    seconds=self.settings.ad_post_click_wait_seconds,
+                ),
             ]
         if match.state == "download_prompt":
             return [
