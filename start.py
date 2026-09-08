@@ -10,7 +10,7 @@ from wyy_assist.automation import preview_once, run_live
 from wyy_assist.config import load_settings
 from wyy_assist.executor import ExecutionBlocked
 
-
+# com.netease.cloudmusic
 PROJECT_DIR = Path(__file__).resolve().parent
 DEFAULT_CONFIG = PROJECT_DIR / "config.json"
 
