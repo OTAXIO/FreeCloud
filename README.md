@@ -41,13 +41,15 @@ Set-Location 'D:\others\TOOLS\wyy_code'
 2. `splash_skip`：开屏页出现时点击识别到的“跳过”。
 3. `home`：向左滑动顶部频道栏。
 4. `free_listen`：点击识别到的目标频道。
-5. `ready`：点击识别到的测试入口。
-6. `ad_interaction`：从广告页开始计时，先等待 `minimum_ad_seconds`，点击配置的
+5. `free_listen_icon`：顶部频道未出现时，点击识别到的“免”备用入口。
+6. `free_listen_page`：进入备用页面后向上滑动，使下方拼图入口完整显示。
+7. `ready`：点击识别到的测试入口。
+8. `ad_interaction`：从广告页开始计时，先等待 `minimum_ad_seconds`，点击配置的
    互动点，再等待 `ad_post_click_wait_seconds`；两段计时完成后才处理退出。
-7. `download_prompt`：只匹配“取消”按钮并点击识别中心。
-8. `landing`：只匹配左上角返回箭头，然后发送 Android 返回键。
-9. `ad_close`：点击识别到的关闭按钮。
-10. `limit`：停止流程，并在 `close_emulator_on_limit=true` 时关闭雷电实例。
+9. `download_prompt`：只匹配“取消”按钮并点击识别中心。
+10. `landing`：只匹配左上角返回箭头，然后发送 Android 返回键。
+11. `ad_close`：点击识别到的关闭按钮。
+12. `limit`：停止流程，并在 `close_emulator_on_limit=true` 时关闭雷电实例。
 
 连续执行使用独立的广告周期阶段锁。点击入口后，第一次看到广告相关画面（即使模板暂时
 无法识别）才开始前置计时；前置 15 秒和点击后 10 秒内，任何关闭图标、下载弹窗或落地
@@ -85,8 +87,9 @@ Set-Location 'D:\others\TOOLS\wyy_code'
 ## 模板与校准
 
 `templates/` 中保留了这些状态的参考模板：`launcher_icon`、`splash_skip`、`home`、
-`free_listen`、`ready`、`ad_interaction`、`download_prompt`、`landing`、`ad_close` 和
-`limit`。模板搜索区域和优先级位于 `config.json`。
+`free_listen`、`free_listen_icon`、`free_listen_page`、`ready`、`ad_interaction`、
+`download_prompt`、`landing`、`ad_close` 和 `limit`。模板搜索区域和优先级位于
+`config.json`；滚动后的拼图按钮有一份独立 `ready` 模板，不改变原模板。
 
 测试 APK 画面与现有参考图不同时，应重新校准：
 

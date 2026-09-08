@@ -10,6 +10,8 @@ VALID_STATES = (
     "splash_skip",
     "home",
     "free_listen",
+    "free_listen_icon",
+    "free_listen_page",
     "ready",
     "ad",
     "ad_interaction",
@@ -84,9 +86,11 @@ class Settings:
             "ad_interaction",
             "ad",
             "ready",
+            "free_listen_page",
             "free_listen",
             "landing",
             "home",
+            "free_listen_icon",
             "launcher_icon",
         ]
     )

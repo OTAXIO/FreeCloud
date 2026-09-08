@@ -19,7 +19,16 @@ class AutomationResult:
 
 
 RETRYABLE_STATES = frozenset(
-    {"home", "free_listen", "ready", "download_prompt", "landing", "ad_close"}
+    {
+        "home",
+        "free_listen",
+        "free_listen_icon",
+        "free_listen_page",
+        "ready",
+        "download_prompt",
+        "landing",
+        "ad_close",
+    }
 )
 UNKNOWN_CENTER_FALLBACK_STATES = frozenset({"ready", "ad_interaction"})
 AD_ENTRY_STATES = frozenset({"ad", "ad_interaction", "ad_close", "download_prompt", "landing"})

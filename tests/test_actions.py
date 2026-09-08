@@ -76,6 +76,40 @@ class ActionTests(unittest.TestCase):
         self.assertTrue(executor.run(action, require_target_foreground=False))
         self.assertEqual(adb.calls, [("tap", 120, 420)])
 
+    def test_home_repeats_recommend_tap_before_channel_swipe(self) -> None:
+        actions = ActionPlanner(Settings()).plan(match("home", (420, 120)), (1080, 1920))
+        self.assertEqual(
+            [action.kind for action in actions],
+            [
+                ActionKind.TAP,
+                ActionKind.WAIT,
+                ActionKind.TAP,
+                ActionKind.WAIT,
+                ActionKind.TAP,
+                ActionKind.SWIPE,
+            ],
+        )
+        self.assertEqual(
+            [action.point for action in actions if action.kind is ActionKind.TAP],
+            [(420, 120), (420, 120), (420, 120)],
+        )
+
+    def test_free_listen_icon_fallback_clicks_match_center(self) -> None:
+        actions = ActionPlanner(Settings()).plan(
+            match("free_listen_icon", (160, 760)),
+            (1080, 1920),
+        )
+        self.assertEqual(actions[0].kind, ActionKind.TAP)
+        self.assertEqual(actions[0].point, (160, 760))
+
+    def test_free_listen_page_scrolls_toward_lower_puzzle_section(self) -> None:
+        actions = ActionPlanner(Settings()).plan(
+            match("free_listen_page", (200, 160)),
+            (1080, 1920),
+        )
+        self.assertEqual(actions[0].kind, ActionKind.SWIPE)
+        self.assertEqual(actions[0].swipe, (540, 1574, 540, 538, 550))
+
     def test_foreground_must_match_configured_test_package(self) -> None:
         settings = Settings(package="com.example.school.mockads", execution_enabled=True)
         adb = FakeAdb("com.example.other/.MainActivity")

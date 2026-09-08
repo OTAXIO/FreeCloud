@@ -19,9 +19,11 @@
     "ad_interaction",
     "ad",
     "ready",
+    "free_listen_page",
     "free_listen",
     "landing",
     "home",
+    "free_listen_icon",
     "launcher_icon"
   ],
   "poll_interval_seconds": 0.7,
@@ -62,10 +64,31 @@
         "search_roi": [0.4, 0.03, 0.4, 0.12]
       }
     ],
+    "free_listen_icon": [
+      {
+        "path": "templates/free_listen_icon_reference.png",
+        "search_roi": [0.0, 0.03, 1.0, 0.94],
+        "threshold": 0.9
+      }
+    ],
+    "free_listen_page": [
+      {
+        "path": "templates/free_listen_page_reference.png",
+        "search_roi": [0.0, 0.02, 0.8, 0.35],
+        "threshold": 0.84,
+        "template_roi": [0.04, 0.035, 0.44, 0.07]
+      }
+    ],
     "ready": [
       {
         "path": "templates/ready_reference.png",
         "search_roi": [0.2, 0.48, 0.6, 0.25]
+      },
+      {
+        "path": "templates/ready_scrolled_reference.png",
+        "search_roi": [0.15, 0.45, 0.7, 0.52],
+        "threshold": 0.84,
+        "template_roi": [0.33, 0.86, 0.36, 0.09]
       }
     ],
     "ad_interaction": [

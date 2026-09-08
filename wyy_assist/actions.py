@@ -49,7 +49,20 @@ class ActionPlanner:
             return [Action(ActionKind.TAP, "跳过测试应用开屏页", point=match.center)]
         if match.state == "home":
             x1, y1, x2, y2, duration = self.settings.top_menu_swipe
-            return [
+            actions: list[Action] = []
+            for attempt in range(3):
+                actions.append(
+                    Action(
+                        ActionKind.TAP,
+                        f"第 {attempt + 1}/3 次点击顶部推荐菜单，排除初次进入干扰",
+                        point=match.center,
+                    )
+                )
+                if attempt < 2:
+                    actions.append(
+                        Action(ActionKind.WAIT, "等待推荐页响应", seconds=0.5)
+                    )
+            actions.append(
                 Action(
                     ActionKind.SWIPE,
                     "向左滑动顶部频道栏，显示右侧的免费听频道",
@@ -61,9 +74,26 @@ class ActionPlanner:
                         int(duration),
                     ),
                 )
-            ]
+            )
+            return actions
         if match.state == "free_listen":
             return [Action(ActionKind.TAP, "点击免费听频道", point=match.center)]
+        if match.state == "free_listen_icon":
+            return [Action(ActionKind.TAP, "未找到顶部频道，点击识别到的“免”入口", point=match.center)]
+        if match.state == "free_listen_page":
+            return [
+                Action(
+                    ActionKind.SWIPE,
+                    "向上滑动免费听页面，使下方拼图入口进入识别区域",
+                    swipe=(
+                        round(0.5 * width),
+                        round(0.82 * height),
+                        round(0.5 * width),
+                        round(0.28 * height),
+                        550,
+                    ),
+                )
+            ]
         if match.state == "ready":
             return [Action(ActionKind.TAP, "点击看视频、点亮拼图入口", point=match.center)]
         if match.state in {"ad", "ad_interaction"}:
