@@ -15,6 +15,10 @@ PROJECT_DIR = Path(__file__).resolve().parent
 DEFAULT_CONFIG = PROJECT_DIR / "config.json"
 
 
+def package_is_configured(package: str) -> bool:
+    return bool(package.strip()) and package.strip().lower() != "none"
+
+
 def choose_config(explicit: str | None = None) -> Path:
     if explicit:
         path = Path(explicit).expanduser()
@@ -41,9 +45,13 @@ def run(config_path: Path) -> int:
     device = adb.ensure_device()
     print(f"ADB 设备：{device}")
 
-    if not settings.execution_enabled:
+    if not package_is_configured(settings.package):
+        print("\n目标包名尚未配置，将只识别当前页面并演练下一步动作。")
+        print("填写 config.json 的 package 后，双击启动即可进入连续状态机。\n")
+        result = preview_once(settings, adb)
+    elif not settings.execution_enabled:
         print("\n点击功能当前关闭，将只识别当前页面并演练下一步动作。")
-        print("若要测试连续点击，请在 config.json 中填写独立测试 APK 的包名并启用 execution_enabled。\n")
+        print("若要测试连续点击，请在 config.json 中启用 execution_enabled。\n")
         result = preview_once(settings, adb)
     else:
         print("\n测试点击已开启，启动连续状态机。按 Ctrl+C 可随时停止。\n")

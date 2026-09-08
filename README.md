@@ -7,7 +7,7 @@
 项目只有一套代码和一份默认配置 `config.json`。默认配置不绑定任何应用：
 
 - `package` 为 `none`；
-- `execution_enabled` 为 `false`；
+- `execution_enabled` 保持连续状态机开启；`package: none` 时仍不会发送点击；
 - 识别模板、流程、等待时间、点击坐标和状态机参数均已保留。
 
 ## 一键启动
@@ -20,18 +20,18 @@ Set-Location 'D:\others\TOOLS\wyy_code'
 & 'D:\Basement\Miniconda3\envs\jiaoworun\python.exe' .\start.py
 ```
 
-默认点击关闭时，程序只识别当前画面并打印下一步动作。要在独立测试 APK 中执行连续
-状态机，需要先修改 `config.json`：
+默认包名为 `none` 时，程序只识别当前画面并打印下一步动作。要在独立测试 APK 中执行
+连续状态机，只需要修改 `config.json` 的包名：
 
 ```json
 {
-  "package": "com.example.school.mockads",
-  "execution_enabled": true
+  "package": "com.example.school.mockads"
 }
 ```
 
 启动前确保该包正处于模拟器前台。执行器会核对配置包名与实际前台窗口；包名仍为
-`none`、点击开关关闭或前台包不匹配时不会发送输入。
+`none`、点击开关关闭或前台包不匹配时不会发送输入。默认配置已经保留
+`execution_enabled: true`，因此填入测试包名后，双击 `start.py` 就会恢复连续执行。
 
 ## 默认测试流程
 
@@ -110,7 +110,7 @@ Set-Location 'D:\others\TOOLS\wyy_code'
 
 - `serial`：多设备时指定 `adb devices` 显示的序列号。
 - `package`：独立测试 APK 的真实包名；默认 `none`。
-- `execution_enabled`：`start.py` 是否进入连续点击状态机；默认 `false`。
+- `execution_enabled`：`start.py` 是否进入连续点击状态机；当前为 `true`。
 - `threshold`：模板匹配阈值，默认 `0.86`。
 - `template_scales`：多尺度匹配比例。
 - `state_priority`：同帧命中多个状态时的优先级。

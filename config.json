@@ -23,7 +23,7 @@
   "daily_success_target": 2,
   "expected_ad_entries": 10,
   "unknown_timeout_seconds": 30.0,
-  "execution_enabled": false,
+  "execution_enabled": true,
   "ad_post_click_wait_seconds": 10.0,
   "top_menu_swipe": [0.85, 0.08, 0.25, 0.08, 450],
   "ad_interaction_point": [0.5, 0.5],
