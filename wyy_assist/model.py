@@ -24,20 +24,28 @@ class TemplateSpec:
     path: str
     search_roi: tuple[float, float, float, float] | None = None
     threshold: float | None = None
+    template_roi: tuple[float, float, float, float] | None = None
+
+    @staticmethod
+    def _read_roi(value: object, name: str) -> tuple[float, float, float, float] | None:
+        if value is None:
+            return None
+        if not isinstance(value, (list, tuple)) or len(value) != 4:
+            raise ValueError(f"{name} 必须是 [x, y, width, height]")
+        roi = tuple(float(item) for item in value)
+        if not all(0.0 <= item <= 1.0 for item in roi):
+            raise ValueError(f"{name} 必须使用 0..1 的归一化坐标")
+        if roi[2] <= 0.0 or roi[3] <= 0.0:
+            raise ValueError(f"{name} 的 width 和 height 必须大于 0")
+        return roi
 
     @classmethod
     def from_dict(cls, value: dict[str, Any]) -> "TemplateSpec":
-        roi = value.get("search_roi")
-        if roi is not None:
-            if len(roi) != 4:
-                raise ValueError("search_roi 必须是 [x, y, width, height]")
-            roi = tuple(float(item) for item in roi)
-            if not all(0.0 <= item <= 1.0 for item in roi):
-                raise ValueError("search_roi 必须使用 0..1 的归一化坐标")
         return cls(
             path=str(value["path"]),
-            search_roi=roi,
+            search_roi=cls._read_roi(value.get("search_roi"), "search_roi"),
             threshold=float(value["threshold"]) if value.get("threshold") is not None else None,
+            template_roi=cls._read_roi(value.get("template_roi"), "template_roi"),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -46,6 +54,8 @@ class TemplateSpec:
             result["search_roi"] = [round(item, 6) for item in self.search_roi]
         if self.threshold is not None:
             result["threshold"] = self.threshold
+        if self.template_roi is not None:
+            result["template_roi"] = [round(item, 6) for item in self.template_roi]
         return result
 
 

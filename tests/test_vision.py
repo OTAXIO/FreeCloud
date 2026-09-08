@@ -59,6 +59,35 @@ class VisionTests(unittest.TestCase):
             )
             self.assertIsNone(StateRecognizer(settings).best_match(screen))
 
+    def test_template_roi_matches_and_returns_cropped_target_center(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            template = np.zeros((60, 120, 3), dtype=np.uint8)
+            target = template[30:54, 12:48]
+            cv2.rectangle(target, (1, 1), (34, 22), (255, 255, 255), 2)
+            cv2.line(target, (3, 20), (31, 3), (127, 127, 127), 2)
+            write_png(root / "prompt.png", template)
+            screen = np.zeros((160, 240, 3), dtype=np.uint8)
+            screen[70:130, 80:200] = template
+            settings = Settings(
+                threshold=0.9,
+                template_scales=[1.0],
+                templates={
+                    "download_prompt": [
+                        TemplateSpec(
+                            "prompt.png",
+                            template_roi=(0.1, 0.5, 0.3, 0.4),
+                        )
+                    ]
+                },
+                config_path=root / "config.json",
+            )
+
+            match = StateRecognizer(settings).best_match(screen)
+            self.assertIsNotNone(match)
+            assert match is not None
+            self.assertEqual(match.center, (110, 112))
+
     def test_state_priority_wins_when_overlay_and_background_both_match(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

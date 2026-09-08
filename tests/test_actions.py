@@ -67,6 +67,22 @@ class ActionTests(unittest.TestCase):
         self.assertEqual(actions[1].point, (540, 960))
         self.assertEqual(actions[2].seconds, 10.0)
 
+    def test_download_prompt_clicks_recognized_cancel_center(self) -> None:
+        settings = Settings(download_cancel_point=(0.1, 0.1))
+        actions = ActionPlanner(settings).plan(
+            match("download_prompt", (638, 1091)),
+            (1080, 1920),
+        )
+        self.assertEqual(len(actions), 1)
+        self.assertEqual(actions[0].kind, ActionKind.TAP)
+        self.assertEqual(actions[0].point, (638, 1091))
+
+    def test_landing_uses_android_back_instead_of_title_template_center(self) -> None:
+        actions = ActionPlanner(Settings()).plan(match("landing", (70, 70)), (1080, 1920))
+        self.assertEqual(len(actions), 1)
+        self.assertEqual(actions[0].kind, ActionKind.BACK)
+        self.assertIsNone(actions[0].point)
+
     def test_ready_state_retries_three_total_attempts_then_stalls(self) -> None:
         policy = StateRetryPolicy(retry_after_seconds=3.0, max_attempts=3)
         policy.begin("ready")

@@ -69,8 +69,8 @@ class ActionPlanner:
             return [
                 Action(
                     ActionKind.TAP,
-                    "取消测试下载弹窗",
-                    point=_absolute_point(self.settings.download_cancel_point, screen_size),
+                    "点击识别到的取消按钮",
+                    point=match.center,
                 )
             ]
         if match.state == "landing":

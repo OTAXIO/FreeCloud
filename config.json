@@ -60,13 +60,17 @@
     "download_prompt": [
       {
         "path": "templates/download_prompt_reference.png",
-        "search_roi": [0.02, 0.38, 0.96, 0.3]
+        "search_roi": [0.02, 0.38, 0.96, 0.3],
+        "threshold": 0.78,
+        "template_roi": [0.53, 0.6, 0.19, 0.36]
       }
     ],
     "landing": [
       {
         "path": "templates/landing_reference.png",
-        "search_roi": [0.0, 0.0, 0.8, 0.18]
+        "search_roi": [0.0, 0.0, 0.8, 0.18],
+        "threshold": 0.78,
+        "template_roi": [0.02, 0.1, 0.22, 0.8]
       }
     ],
     "ad_close": [

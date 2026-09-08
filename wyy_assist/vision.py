@@ -54,7 +54,11 @@ class StateRecognizer:
                 path = Path(spec.path)
                 if not path.is_absolute():
                     path = (base / path).resolve()
-                self.templates.append(LoadedTemplate(state, spec, path, _read_template(path)))
+                image = _read_template(path)
+                if spec.template_roi is not None:
+                    x, y, width, height = normalized_roi_to_pixels(spec.template_roi, image.shape)
+                    image = image[y : y + height, x : x + width].copy()
+                self.templates.append(LoadedTemplate(state, spec, path, image))
 
     def best_match(self, screen: np.ndarray) -> Match | None:
         if screen.size == 0:

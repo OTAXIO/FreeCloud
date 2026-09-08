@@ -42,8 +42,8 @@ Set-Location 'D:\others\TOOLS\wyy_code'
 3. `ready`：点击识别到的测试入口。
 4. `ad_interaction`：等待 `minimum_ad_seconds`，点击配置的互动点，再等待
    `ad_post_click_wait_seconds`。
-5. `download_prompt`：点击配置的取消位置。
-6. `landing`：发送 Android 返回键。
+5. `download_prompt`：只匹配“取消”按钮并点击识别中心。
+6. `landing`：只匹配左上角返回箭头，然后发送 Android 返回键。
 7. `ad_close`：点击识别到的关闭按钮。
 8. `limit`：停止流程。
 
@@ -114,6 +114,7 @@ Set-Location 'D:\others\TOOLS\wyy_code'
 - `threshold`：模板匹配阈值，默认 `0.86`。
 - `template_scales`：多尺度匹配比例。
 - `state_priority`：同帧命中多个状态时的优先级。
+- `template_roi`：先从参考图中裁出真正要识别的按钮，使用归一化坐标。
 - `poll_interval_seconds`：截图轮询间隔。
 - `consecutive_hits`：确认状态所需的连续命中帧数。
 - `minimum_ad_seconds`：互动前等待时间，当前为 17 秒。
