@@ -7,4 +7,6 @@ session.json
 session.json.tmp
 session.control.json
 session.control.json.tmp
+session.shutdown.json
+session.shutdown.json.tmp
 logs/

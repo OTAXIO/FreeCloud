@@ -4,7 +4,7 @@ import time
 from dataclasses import replace
 
 from .actions import Action, ActionKind
-from .adb import AdbClient, AdbError
+from .adb import AdbClient, AdbError, foreground_package
 from .executor import ActionExecutor, ExecutionBlocked
 from .model import Match, Settings
 from .tracker import StableStateTracker
@@ -57,12 +57,44 @@ def recover_page(
     next_action = time.monotonic()
     last_error = cause
     allowed_resume = RESUME_STATES.difference({blocked_state})
+    reopen_attempts = 0
+    reopening = False
+    launcher = None
     with adb.command_deadline(deadline):
         while time.monotonic() < deadline:
             try:
                 screen = adb.screenshot()
                 foreground = adb.foreground_window()
-                in_target = settings.package.strip() in foreground
+                package = foreground_package(foreground)
+                in_target = settings.package.strip() == package
+                if not package:
+                    # Window focus may be null during a crash/launch transition;
+                    # don't send Back into an unconfirmed, newly opening page.
+                    stable.observe(None)
+                    remaining = deadline - time.monotonic()
+                    if remaining > 0:
+                        time.sleep(min(settings.poll_interval_seconds, remaining))
+                    continue
+                if not in_target and package:
+                    if launcher is None:
+                        launcher = adb.launcher_package()
+                    if package == launcher:
+                        stable.observe(None)
+                        if time.monotonic() >= next_action and reopen_attempts < 3:
+                            executor.verify_input_enabled()
+                            # Confirm the desktop again immediately before launching.
+                            if foreground_package(adb.foreground_window()) == launcher:
+                                reopen_attempts += 1
+                                reopening = True
+                                next_action = time.monotonic() + 5.0
+                                print(f"[恢复] 任务尚未完成，已回到模拟器桌面；第 {reopen_attempts}/3 次重新进入应用")
+                                allowed_resume = RESUME_STATES
+                                adb.launch_app(settings.package.strip())
+                        # BACK on the launcher cannot restore an app that crashed.
+                        remaining = deadline - time.monotonic()
+                        if remaining > 0:
+                            time.sleep(min(settings.poll_interval_seconds, remaining))
+                        continue
                 # An overlay is not a successful return to its visible background.
                 exit_match = exits.best_match(screen) if in_target else None
                 match = recognizer.best_match(screen, allowed_states=allowed_resume) if in_target else None
@@ -77,7 +109,11 @@ def recover_page(
                 else:
                     stable.observe(None)
                     if time.monotonic() >= next_action:
-                        if exit_match is not None and exit_match.state != "landing":
+                        splash = (recognizer.best_match(screen, allowed_states={"splash_skip"})
+                                  if reopening and in_target and match is None else None)
+                        if splash is not None:
+                            action = Action(ActionKind.TAP, "重新进入应用：跳过开屏页", point=splash.center)
+                        elif exit_match is not None and exit_match.state != "landing":
                             action = Action(ActionKind.TAP, "恢复：点击识别到的取消/叉", point=exit_match.center)
                         else:
                             action = Action(ActionKind.BACK, "恢复：返回上一页")

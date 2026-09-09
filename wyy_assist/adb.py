@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+import re
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -13,6 +14,16 @@ class AdbError(RuntimeError):
     pass
 
 
+def foreground_package(output: str) -> str:
+    """CurrentFocus wins over a stale FocusedApp left behind by a crash."""
+    lines = output.splitlines()
+    focused = [line for line in lines if "mCurrentFocus=" in line]
+    if not focused:
+        focused = [line for line in lines if "mFocusedApp=" in line] or lines
+    match = re.search(r"\b([A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)+)/[A-Za-z0-9_.$]+", "\n".join(focused))
+    return match.group(1) if match else ""
+
+
 class AdbClient:
     """Minimal, read-mostly ADB adapter used by the visual monitor."""
 
@@ -20,6 +31,7 @@ class AdbClient:
         self.adb_path = Path(adb_path).expanduser()
         self.serial = serial.strip()
         self._command_deadline: float | None = None
+        self._launcher_package: str | None = None
 
     @contextmanager
     def command_deadline(self, deadline: float):
@@ -135,3 +147,31 @@ class AdbClient:
             if "mCurrentFocus=" in line or "mFocusedApp=" in line
         ]
         return "\n".join(focused)
+
+    def launcher_package(self) -> str:
+        if self._launcher_package is None:
+            output = str(self.run("shell", "cmd", "package", "resolve-activity", "--brief",
+                                  "-a", "android.intent.action.MAIN",
+                                  "-c", "android.intent.category.HOME", timeout=3.0))
+            package = foreground_package(output)
+            if not package:
+                raise AdbError("无法确定 Android 桌面的包名")
+            self._launcher_package = package
+        return self._launcher_package
+
+    def launch_app(self, package: str) -> None:
+        # Resolve only this configured app, never use a generic intent or an
+        # arbitrary tap on the launcher (where icons can change position).
+        if not re.fullmatch(r"[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)+", package):
+            raise AdbError("无效的目标包名")
+        output = str(self.run("shell", "cmd", "package", "resolve-activity", "--brief",
+                              "-a", "android.intent.action.MAIN",
+                              "-c", "android.intent.category.LAUNCHER", "-p", package,
+                              timeout=3.0))
+        component = next((line.strip() for line in output.splitlines()
+                          if re.fullmatch(re.escape(package) + r"/[A-Za-z0-9_.$]+", line.strip())), None)
+        if component is None:
+            raise AdbError(f"无法找到应用启动入口：{package}")
+        result = str(self.run("shell", "am", "start", "-W", "-n", component, timeout=5.0))
+        if "Error:" in result or "Exception" in result:
+            raise AdbError(f"应用重新启动失败：{result.strip()}")

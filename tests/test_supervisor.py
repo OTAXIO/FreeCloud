@@ -68,6 +68,15 @@ class SupervisorTests(unittest.TestCase):
         self.worker.assert_not_called()
         self.prompt.assert_not_called()
 
+    def test_daily_limit_does_not_skip_pending_shutdown(self):
+        self.settings.package = "com.example.school.mockads"
+        self.settings.execution_enabled = self.settings.daily_run_enabled = True
+        self.worker_results([0])
+        with patch("wyy_assist.supervisor.limit_reached_today", return_value=True), \
+             patch("wyy_assist.supervisor.shutdown_pending", return_value=True):
+            self.assertEqual(supervise(self.config, autorun=True), 0)
+        self.worker.assert_called_once()
+
     def test_ctrl_c_stops_worker_before_retry_dialog_can_launch_another(self):
         process = Mock()
         process.wait.side_effect = [KeyboardInterrupt(), 130]

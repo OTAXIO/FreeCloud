@@ -13,6 +13,7 @@ from pathlib import Path
 
 from .config import load_settings
 from .daily import limit_reached_today, state_path
+from .shutdown import shutdown_pending
 
 
 def watch_parent(parent_pid: int) -> None:
@@ -159,7 +160,7 @@ def supervise(config_path: Path, *, autorun: bool) -> int:
         settings = load_settings(config_path)
         tracking = (settings.daily_run_enabled and settings.execution_enabled
                     and settings.package.strip().lower() not in {"", "none"})
-        if tracking and limit_reached_today(settings):
+        if tracking and limit_reached_today(settings) and not shutdown_pending(settings):
             print("[每日] 今日已经达到 limit，跳过运行。")
             return 0
         current_boot = boot_id()

@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 from .actions import ActionPlanner
-from .adb import AdbClient, AdbError
+from .adb import AdbClient, AdbError, foreground_package
 from .executor import ActionExecutor, ExecutionBlocked
 from .model import Settings
 from .tracker import StableStateTracker
@@ -218,7 +218,7 @@ def run_startup_navigation(
         foreground = ""
     app_launch_requested = bool(
         settings.package.strip()
-        and settings.package.strip().lower() in foreground.lower()
+        and settings.package.strip() == foreground_package(foreground)
     )
     if app_launch_requested:
         print("[启动] 目标应用已在前台，直接接管当前页面")

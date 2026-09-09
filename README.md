@@ -197,6 +197,24 @@ Set-Location 'D:\others\TOOLS\wyy_code'
 
 ## 测试
 
+### 闪退恢复与退出核验
+
+- 任务未完成、前台回到 Android 桌面时，恢复流程会按 `package` 解析应用启动入口并重新打开；
+  同一轮恢复最多重开 3 次，总时限仍为 30 秒，超时进入原来的“继续 / 放弃”提示。
+  应用重新进入期间可识别开屏跳过；确认回到正常流程后再次禁用开屏跳过。
+- 前台判断优先读取当前焦点窗口，避免应用闪退后残留的 `mFocusedApp` 被误认为仍在应用里。
+  浏览器等其他页面仍先尝试返回；不会在桌面上反复按返回。
+- 结束时只关闭 `emulator_index` 指定的实例。发送 `quit` 后同时检查 `list2`、`isrunning`
+  和已记录的进程退出状态，不再把命令返回成功当作模拟器已经退出。
+  常规退出会重试；30 秒后只对本实例、路径已核验的残留进程执行兜底结束，最多再等待 10 秒。
+  无法核验或仍未退出会报错，不会关闭所有实例或按进程名批量结束。
+  状态字段使用[雷电官方命令行接口](https://help.ldmnq.com/docs/LDPlayer-ming-ling-hang-kai-fa-zhe-shi-yong-shuo-ming)。
+- 确认 `limit` 后，先写入 `session.shutdown.json` 待关闭标记，再记录当日完成。
+  标记只在确认关闭后清除；关闭失败后选择“继续”，会优先补做关闭，今日已完成时不会再次进入应用。
+  放弃仍仅禁止本次开机的后续自动运行。未完成或失败的流程不会主动关闭模拟器。
+
+### 自动化回归测试
+
 ```powershell
 & 'D:\Basement\Miniconda3\envs\jiaoworun\python.exe' -m unittest discover -s tests -v
 ```

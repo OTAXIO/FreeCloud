@@ -12,6 +12,7 @@ from wyy_assist.daily import limit_reached_today, mark_limit_reached
 from wyy_assist.emulator import EmulatorController, EmulatorError
 from wyy_assist.executor import ExecutionBlocked
 from wyy_assist.supervisor import supervise, watch_parent
+from wyy_assist.shutdown import clear_shutdown_pending, mark_shutdown_pending, shutdown_pending
 
 # com.netease.cloudmusic
 PROJECT_DIR = Path(__file__).resolve().parent
@@ -48,6 +49,10 @@ def run(config_path: Path) -> int:
         and settings.execution_enabled
         and package_is_configured(settings.package)
     )
+    if shutdown_pending(settings):
+        print("[结束] 上次流程已完成，但模拟器关闭未确认；先重试关闭，不重新进入应用。")
+        EmulatorController(settings).close()
+        clear_shutdown_pending(settings)
     if daily_tracking and limit_reached_today(settings):
         print(f"配置文件：{config_path}")
         print("[每日] 今日已经检测到 limit，跳过本次运行；明日自动恢复。")
@@ -84,9 +89,14 @@ def run(config_path: Path) -> int:
                 result = AutomationResult("limit", startup_result.transitions)
             else:
                 result = run_live(settings, adb, execute_requested=True)
-            if result.reason == "limit" and daily_tracking:
-                saved_path = mark_limit_reached(settings)
-                print(f"[每日] 已记录今日 limit：{saved_path}")
+            if result.reason == "limit":
+                # Persist cleanup before today's limit, so a failed close (or a
+                # terminated worker) cannot be hidden by the daily skip guard.
+                if settings.close_emulator_on_limit or settings.close_emulator_on_exit:
+                    mark_shutdown_pending(settings)
+                if daily_tracking:
+                    saved_path = mark_limit_reached(settings)
+                    print(f"[每日] 已记录今日 limit：{saved_path}")
     finally:
         close_for_limit = (
             result is not None
@@ -98,6 +108,7 @@ def run(config_path: Path) -> int:
         completed = result is not None and (not live or result.reason == "limit")
         if emulator_shutdown_armed and completed and (settings.close_emulator_on_exit or close_for_limit):
             emulator.close()
+            clear_shutdown_pending(settings)
 
     assert result is not None
     print(f"\n程序结束：{result.reason}；状态转换 {result.transitions} 次")

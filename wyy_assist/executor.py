@@ -4,7 +4,7 @@ import time
 from collections.abc import Callable, Iterable
 
 from .actions import Action, ActionKind
-from .adb import AdbClient
+from .adb import AdbClient, foreground_package
 from .model import Settings
 
 
@@ -45,7 +45,7 @@ class ActionExecutor:
         self.verify_input_enabled()
         package = self.settings.package.strip()
         foreground = self.adb.foreground_window()
-        if package not in foreground:
+        if package != foreground_package(foreground):
             raise ExecutionBlocked(
                 f"前台窗口与配置的测试包不一致；期望 {package}，实际为 {foreground or '未知'}"
             )

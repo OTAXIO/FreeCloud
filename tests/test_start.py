@@ -10,6 +10,11 @@ from wyy_assist.model import Settings
 
 
 class StartTests(unittest.TestCase):
+    def setUp(self):
+        self.pending = self.enterContext(patch("start.shutdown_pending", return_value=False))
+        self.mark_pending = self.enterContext(patch("start.mark_shutdown_pending"))
+        self.clear_pending = self.enterContext(patch("start.clear_shutdown_pending"))
+
     def test_explicit_relative_config_resolves_from_project(self) -> None:
         expected = (start.PROJECT_DIR / "custom.json").resolve()
         self.assertEqual(start.choose_config("custom.json"), expected)
@@ -226,6 +231,43 @@ class StartTests(unittest.TestCase):
             controller.return_value.close.assert_called_once()
             mark.assert_called_once_with(settings)
             live.assert_not_called()
+
+    def test_failed_close_preserves_pending_and_retry_only_closes(self):
+        settings = Settings(package="com.example.school.mockads", execution_enabled=True,
+                            daily_run_enabled=True)
+        with patch("start.load_settings", return_value=settings), \
+             patch("start.limit_reached_today", return_value=False) as reached, \
+             patch("start.mark_limit_reached") as mark, \
+             patch("start.AdbClient") as adb, patch("start.EmulatorController") as controller, \
+             patch("start.run_startup_navigation", return_value=AutomationResult("startup-limit", 1)), \
+             patch("start.run_live") as live:
+            controller.return_value.wait_for_frame.return_value = ("emulator-5554", Mock())
+            controller.return_value.close.side_effect = EmulatorError("still running")
+            with self.assertRaises(EmulatorError):
+                start.run(start.DEFAULT_CONFIG)
+            self.mark_pending.assert_called_once_with(settings)
+            mark.assert_called_once_with(settings)
+            self.clear_pending.assert_not_called()
+
+            controller.reset_mock()
+            adb.reset_mock()
+            reached.return_value = self.pending.return_value = True
+            controller.return_value.close.side_effect = None
+            self.assertEqual(start.run(start.DEFAULT_CONFIG), 0)
+            controller.return_value.close.assert_called_once()
+            controller.return_value.launch_if_needed.assert_not_called()
+            adb.assert_not_called()
+            live.assert_not_called()
+            self.clear_pending.assert_called_once_with(settings)
+
+    def test_failed_pending_cleanup_is_not_cleared_or_skipped(self):
+        self.pending.return_value = True
+        with patch("start.load_settings", return_value=Settings()), \
+             patch("start.EmulatorController") as controller:
+            controller.return_value.close.side_effect = EmulatorError("not stopped")
+            with self.assertRaises(EmulatorError):
+                start.run(start.DEFAULT_CONFIG)
+            self.clear_pending.assert_not_called()
 
 
 if __name__ == "__main__":

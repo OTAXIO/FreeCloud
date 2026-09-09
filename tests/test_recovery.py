@@ -40,6 +40,9 @@ class Device:
     def foreground_window(self):
         return "com.example.school.mockads/.Main"
 
+    def launcher_package(self):
+        return "com.android.launcher3"
+
     def tap(self, *point):
         self.actions.append(("tap", self.clock.now, point))
 
@@ -105,6 +108,68 @@ class RecoveryTests(unittest.TestCase):
                 recover_page(self.settings, self.device, recognizer, self.executor, cause="foreign")
         exits.best_match.assert_not_called()
         self.assertTrue(all(action[0] == "back" for action in self.device.actions))
+
+    def test_desktop_reopens_app_then_resumes_previously_stalled_page(self):
+        self.device.foreground_window = Mock(return_value="com.android.launcher3/.Launcher")
+        def launch(package):
+            self.assertEqual(package, self.settings.package)
+            self.device.foreground_window.return_value = package + "/.Main"
+        self.device.launch_app = Mock(side_effect=launch)
+        recognizer = Mock()
+        recognizer.best_match.side_effect = lambda screen, allowed_states: found("ready") if "ready" in allowed_states else None
+        exits = Mock()
+        exits.best_match.return_value = None
+        with patch("wyy_assist.recovery.recovery_recognizer", return_value=exits):
+            result = recover_page(self.settings, self.device, recognizer, self.executor,
+                                  cause="app crashed", blocked_state="ready")
+        self.assertEqual(result.state, "ready")
+        self.device.launch_app.assert_called_once()
+        self.assertFalse(self.device.actions)
+        self.assertLess(self.clock.now, 30)
+
+    def test_repeated_crash_relaunches_at_most_three_times_without_back_on_desktop(self):
+        self.device.foreground_window = lambda: "mCurrentFocus=com.android.launcher3/.Launcher\nmFocusedApp=com.example.school.mockads/.Main"
+        self.device.launch_app = Mock()
+        with self.assertRaises(RecoveryFailed):
+            recover_page(self.settings, self.device, Mock(), self.executor, cause="crash")
+        self.assertEqual(self.device.launch_app.call_count, 3)
+        self.assertEqual(self.clock.now, 30)
+        self.assertFalse(self.device.actions)
+
+    def test_splash_skip_is_enabled_only_after_reopening(self):
+        self.device.foreground_window = Mock(return_value="com.android.launcher3/.Launcher")
+        self.device.launch_app = Mock(side_effect=lambda package: setattr(
+            self.device.foreground_window, "return_value", package + "/.Splash"))
+        recognizer = Mock()
+        recognizer.best_match.side_effect = lambda screen, allowed_states: (
+            found("splash_skip") if "splash_skip" in allowed_states else None)
+        exits = Mock()
+        exits.best_match.return_value = None
+        with patch("wyy_assist.recovery.recovery_recognizer", return_value=exits):
+            with self.assertRaises(RecoveryFailed):
+                recover_page(self.settings, self.device, recognizer, self.executor, cause="crash")
+        self.assertTrue(self.device.actions)
+        self.assertTrue(all(a[0] == "tap" for a in self.device.actions))
+
+    def test_null_focus_during_crash_never_uses_stale_app_or_sends_back(self):
+        self.device.foreground_window = lambda: "mCurrentFocus=null\nmFocusedApp=com.example.school.mockads/.Main"
+        recognizer = Mock()
+        with self.assertRaises(RecoveryFailed):
+            recover_page(self.settings, self.device, recognizer, self.executor, cause="focus transition")
+        self.assertEqual(self.clock.now, 30)
+        self.assertFalse(self.device.actions)
+        recognizer.best_match.assert_not_called()
+
+    def test_ordinary_recovery_never_searches_splash_skip(self):
+        recognizer = Mock()
+        recognizer.best_match.return_value = None
+        exits = Mock()
+        exits.best_match.return_value = None
+        with patch("wyy_assist.recovery.recovery_recognizer", return_value=exits):
+            with self.assertRaises(RecoveryFailed):
+                recover_page(self.settings, self.device, recognizer, self.executor, cause="unknown")
+        self.assertTrue(all("splash_skip" not in call.kwargs["allowed_states"]
+                            for call in recognizer.best_match.call_args_list))
 
     def test_waits_finish_before_missing_exit_enters_recovery(self):
         def observe(screen, allowed_states=None):
