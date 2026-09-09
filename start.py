@@ -41,15 +41,17 @@ def run(config_path: Path) -> int:
     adb = AdbClient(settings.adb_path, settings.serial)
     emulator = EmulatorController(settings)
     result = None
-    emulator_ready = False
+    emulator_shutdown_armed = False
 
     print(f"配置文件：{config_path}")
     print(f"目标包名：{settings.package}")
     print(f"点击开关：{'开启' if settings.execution_enabled else '关闭'}")
     try:
         emulator.launch_if_needed(adb)
+        # Arm cleanup as soon as the player launch/show request succeeds. If
+        # ADB never becomes ready, the instance must still be closed on exit.
+        emulator_shutdown_armed = True
         device, _ = emulator.wait_for_frame(adb)
-        emulator_ready = True
         print(f"ADB 设备：{device}")
 
         if not package_is_configured(settings.package):
@@ -70,7 +72,7 @@ def run(config_path: Path) -> int:
             and result.reason == "limit"
             and settings.close_emulator_on_limit
         )
-        if emulator_ready and (settings.close_emulator_on_exit or close_for_limit):
+        if emulator_shutdown_armed and (settings.close_emulator_on_exit or close_for_limit):
             emulator.close()
 
     assert result is not None

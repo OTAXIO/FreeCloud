@@ -11,14 +11,18 @@ from wyy_assist.model import Match, Settings, TemplateSpec
 
 
 class StartupAdb:
-    def __init__(self) -> None:
+    def __init__(self, foreground: str = "com.android.launcher") -> None:
         self.calls: list[tuple[str, int, int]] = []
+        self.foreground = foreground
 
     def screenshot(self) -> np.ndarray:
         return np.zeros((1920, 1080, 3), dtype=np.uint8)
 
     def tap(self, x: int, y: int) -> None:
         self.calls.append(("tap", x, y))
+
+    def foreground_window(self) -> str:
+        return self.foreground
 
 
 def match(state: str, center: tuple[int, int]) -> Match:
@@ -56,6 +60,7 @@ class StartupNavigationTests(unittest.TestCase):
             execution_enabled=True,
             consecutive_hits=1,
             startup_navigation_timeout_seconds=10.0,
+            templates={"ready": [TemplateSpec("ready.png")]},
         )
         adb = StartupAdb()
 
@@ -70,7 +75,63 @@ class StartupNavigationTests(unittest.TestCase):
         self.assertEqual(allowed[0], {"home"})
         self.assertEqual(allowed[1], {"launcher_icon"})
         self.assertEqual(allowed[2], {"home"})
-        self.assertEqual(allowed[3], {"launcher_icon", "splash_skip"})
+        self.assertIn("splash_skip", allowed[3])
+        self.assertIn("ready", allowed[3])
+        self.assertNotIn("launcher_icon", allowed[3])
+
+    @patch("wyy_assist.automation.time.sleep", return_value=None)
+    @patch("wyy_assist.automation.StateRecognizer")
+    def test_skips_splash_when_target_app_was_already_foreground(
+        self,
+        recognizer_type: Mock,
+        _sleep: Mock,
+    ) -> None:
+        recognizer_type.return_value.best_match.side_effect = [
+            None,
+            match("splash_skip", (1018, 80)),
+            match("home", (540, 120)),
+        ]
+        settings = Settings(
+            package="com.example.school.mockads",
+            execution_enabled=True,
+            consecutive_hits=1,
+            startup_navigation_timeout_seconds=10.0,
+        )
+        adb = StartupAdb("mCurrentFocus=com.example.school.mockads/.SplashActivity")
+
+        result = run_startup_navigation(settings, adb, execute_requested=True)
+
+        self.assertEqual(result.reason, "startup-home")
+        self.assertEqual(adb.calls, [("tap", 1018, 80)])
+
+    @patch("wyy_assist.automation.StateRecognizer")
+    def test_hands_off_when_target_app_was_already_on_business_page(
+        self,
+        recognizer_type: Mock,
+    ) -> None:
+        recognizer_type.return_value.best_match.side_effect = [
+            None,
+            match("ready", (540, 1180)),
+        ]
+        settings = Settings(
+            package="com.example.school.mockads",
+            execution_enabled=True,
+            consecutive_hits=1,
+            startup_navigation_timeout_seconds=10.0,
+            templates={"ready": [TemplateSpec("ready.png")]},
+        )
+        adb = StartupAdb("mCurrentFocus=com.example.school.mockads/.MainActivity")
+
+        result = run_startup_navigation(settings, adb, execute_requested=True)
+
+        self.assertEqual(result.reason, "startup-ready")
+        self.assertEqual(adb.calls, [])
+        self.assertIn(
+            "ready",
+            recognizer_type.return_value.best_match.call_args_list[1].kwargs[
+                "allowed_states"
+            ],
+        )
 
 
 if __name__ == "__main__":

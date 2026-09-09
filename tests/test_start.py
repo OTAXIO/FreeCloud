@@ -5,6 +5,7 @@ from unittest.mock import Mock, patch
 
 import start
 from wyy_assist.automation import AutomationResult
+from wyy_assist.emulator import EmulatorError
 from wyy_assist.model import Settings
 
 
@@ -119,6 +120,29 @@ class StartTests(unittest.TestCase):
 
         self.assertEqual(start.run(start.DEFAULT_CONFIG), 0)
         emulator_controller.return_value.close.assert_not_called()
+
+    @patch("start.load_settings")
+    @patch("start.AdbClient")
+    @patch("start.EmulatorController")
+    def test_wait_failure_still_closes_launched_emulator(
+        self,
+        emulator_controller: Mock,
+        adb_client: Mock,
+        load_settings: Mock,
+    ) -> None:
+        load_settings.return_value = Settings(
+            package="com.example.school.mockads",
+            execution_enabled=True,
+            close_emulator_on_exit=True,
+        )
+        emulator_controller.return_value.wait_for_frame.side_effect = EmulatorError(
+            "ADB frame timeout"
+        )
+
+        with self.assertRaisesRegex(EmulatorError, "ADB frame timeout"):
+            start.run(start.DEFAULT_CONFIG)
+
+        emulator_controller.return_value.close.assert_called_once_with()
 
 
 if __name__ == "__main__":

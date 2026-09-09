@@ -47,7 +47,7 @@ class EmulatorTests(unittest.TestCase):
             self.assertEqual(popen.call_args.args[0], [str(player)])
             self.assertEqual(popen.call_args.kwargs["cwd"], str(player.parent))
 
-    def test_reuses_an_already_connected_emulator(self) -> None:
+    def test_connected_adb_still_requests_visible_emulator_window(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             player = Path(directory) / "dnplayer.exe"
             player.touch()
@@ -57,7 +57,8 @@ class EmulatorTests(unittest.TestCase):
                 popen=popen,
             )
             self.assertFalse(controller.launch_if_needed(FakeAdb(["emulator-5554"])))
-            popen.assert_not_called()
+            popen.assert_called_once()
+            self.assertEqual(popen.call_args.args[0], [str(player)])
 
     def test_wait_for_frame_returns_only_after_screenshot_succeeds(self) -> None:
         adb = FakeAdb(["emulator-5554"])

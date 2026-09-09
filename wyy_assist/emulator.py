@@ -49,10 +49,6 @@ class EmulatorController:
         target_is_connected = (
             self.settings.serial in devices if self.settings.serial else bool(devices)
         )
-        if target_is_connected:
-            print("[启动] 雷电模拟器已有可用 ADB 设备，直接复用")
-            return False
-
         try:
             self.popen(
                 [str(executable)],
@@ -62,8 +58,14 @@ class EmulatorController:
             )
         except OSError as exc:
             raise EmulatorError(f"无法启动雷电模拟器: {exc}") from exc
-        print(f"[启动] 已打开雷电模拟器: {executable}")
-        return True
+        if target_is_connected:
+            # ADB may be kept alive by a background process even when the
+            # player window is closed. Launching dnplayer again is harmless
+            # for an active instance and makes a hidden/missing window visible.
+            print("[启动] ADB 设备已在线，已请求显示雷电模拟器窗口")
+        else:
+            print(f"[启动] 已打开雷电模拟器: {executable}")
+        return not target_is_connected
 
     def wait_for_frame(self, adb: AdbClient) -> tuple[str, np.ndarray]:
         deadline = self.monotonic() + self.settings.emulator_start_timeout_seconds

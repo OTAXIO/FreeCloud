@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 from .actions import Action, ActionKind, ActionPlanner
-from .adb import AdbClient
+from .adb import AdbClient, AdbError
 from .executor import ActionExecutor
 from .model import Settings
 from .tracker import StableStateTracker
@@ -208,17 +208,33 @@ def run_startup_navigation(
     action_state: str | None = None
     action_count = 0
     last_action_at: float | None = None
-    app_launch_requested = False
+    try:
+        foreground = adb.foreground_window()
+    except AdbError:
+        # Recognition can still launch the app when dumpsys is temporarily
+        # unavailable during Android startup.
+        foreground = ""
+    app_launch_requested = bool(
+        settings.package.strip()
+        and settings.package.strip().lower() in foreground.lower()
+    )
+    if app_launch_requested:
+        print("[启动] 目标应用已在前台，直接接管当前页面")
 
     while time.monotonic() < deadline:
         screen = adb.screenshot()
         # The home marker is cheap to match and ends startup immediately. Before
-        # the app icon is clicked, never search/click the splash skip template.
+        # the app icon is clicked (or is known to be foreground), scan only the
+        # launcher icon so launcher search widgets cannot become click targets.
         match = recognizer.best_match(screen, allowed_states={"home"})
         if match is None:
-            startup_states = {"launcher_icon"}
             if app_launch_requested:
+                # Restore the old hand-off behavior for scripts started while
+                # the app is already on splash, a business page, or an ad page.
+                startup_states = runtime_recognition_states(settings)
                 startup_states.add("splash_skip")
+            else:
+                startup_states = {"launcher_icon"}
             match = recognizer.best_match(screen, allowed_states=startup_states)
         transition = tracker.observe(match.state if match is not None else None)
         if match is None or transition is None:
