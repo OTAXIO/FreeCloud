@@ -20,6 +20,30 @@ Set-Location 'D:\others\TOOLS\wyy_code'
 & 'D:\Basement\Miniconda3\envs\jiaoworun\python.exe' .\start.py
 ```
 
+## 每日运行与开机自启
+
+默认配置已开启 `daily_run_enabled`。程序只有在状态机确实识别到 `limit` 后，才会把当天
+日期写入项目根目录的 `session.json`：
+
+```json
+{
+  "last_limit_date": "2026-09-09"
+}
+```
+
+同一天再次启动时，程序会在打开雷电模拟器之前直接结束；第二天日期不再相同，流程自动
+恢复。超时、识别失败、手动按 Ctrl+C 或其他非 `limit` 结果不会写入完成日期，因此不会
+误锁当天后续运行。`session.json` 是本机运行状态，已被 Git 忽略。
+
+双击 `安装开机自启.bat` 可为当前 Windows 用户安装计划任务
+`WyyVisualAssistDaily`。任务在以下两种情况下运行：
+
+1. 当前用户登录 Windows 时，用于每次开机登录后自动执行。
+2. 每日 00:05；如果当时关机或任务未能运行，Windows 会在之后可用时补跑。
+
+两个触发器共用同一套每日判定，因此同一天不会在检测到 `limit` 后重复执行。后台输出
+保存在 `logs/autorun.log`。如不再需要，双击 `卸载开机自启.bat` 即可删除计划任务。
+
 默认包名为 `none` 时，程序只识别当前画面并打印下一步动作。要在独立测试 APK 中执行
 连续状态机，只需要修改 `config.json` 的包名：
 
@@ -134,6 +158,8 @@ Set-Location 'D:\others\TOOLS\wyy_code'
 - `startup_navigation_timeout_seconds`：启动图标/跳过页导航的最长时间。
 - `close_emulator_on_limit`：识别到 `limit` 后是否关闭配置实例。
 - `close_emulator_on_exit`：程序正常结束、超时或被 Ctrl+C 停止时是否关闭模拟器。
+- `daily_run_enabled`：是否启用“当天检测到 limit 后不再运行”的日期判断。
+- `daily_state_file`：保存 `last_limit_date` 的本地 JSON 文件，默认 `session.json`。
 - `serial`：多设备时指定 `adb devices` 显示的序列号。
 - `package`：独立测试 APK 的真实包名；设为 `none` 时只演练。
 - `execution_enabled`：`start.py` 是否进入连续点击状态机；当前为 `true`。

@@ -85,6 +85,8 @@ class Settings:
     startup_navigation_timeout_seconds: float = 90.0
     close_emulator_on_limit: bool = True
     close_emulator_on_exit: bool = True
+    daily_run_enabled: bool = False
+    daily_state_file: str = "session.json"
     package: str = "none"
     deep_link: str = ""
     threshold: float = 0.86
@@ -139,6 +141,8 @@ class Settings:
             startup_navigation_timeout_seconds=float(value.get("startup_navigation_timeout_seconds", 90.0)),
             close_emulator_on_limit=bool(value.get("close_emulator_on_limit", True)),
             close_emulator_on_exit=bool(value.get("close_emulator_on_exit", True)),
+            daily_run_enabled=bool(value.get("daily_run_enabled", False)),
+            daily_state_file=str(value.get("daily_state_file", "session.json")),
             package=str(value.get("package", "none")),
             deep_link=str(value.get("deep_link", "")),
             threshold=float(value.get("threshold", 0.86)),
@@ -179,6 +183,8 @@ class Settings:
             raise ValueError("emulator_start_timeout_seconds 必须大于 0")
         if self.startup_navigation_timeout_seconds <= 0:
             raise ValueError("startup_navigation_timeout_seconds 必须大于 0")
+        if not self.daily_state_file.strip():
+            raise ValueError("daily_state_file 不能为空")
         if self.consecutive_hits < 1:
             raise ValueError("consecutive_hits 必须至少为 1")
         if self.minimum_ad_seconds < 0:
@@ -215,6 +221,8 @@ class Settings:
             "startup_navigation_timeout_seconds": self.startup_navigation_timeout_seconds,
             "close_emulator_on_limit": self.close_emulator_on_limit,
             "close_emulator_on_exit": self.close_emulator_on_exit,
+            "daily_run_enabled": self.daily_run_enabled,
+            "daily_state_file": self.daily_state_file,
             "package": self.package,
             "deep_link": self.deep_link,
             "threshold": self.threshold,

@@ -26,6 +26,27 @@ class StartTests(unittest.TestCase):
         self.assertTrue(start.package_is_configured("com.example.school.mockads"))
 
     @patch("start.load_settings")
+    @patch("start.limit_reached_today", return_value=True)
+    @patch("start.AdbClient")
+    @patch("start.EmulatorController")
+    def test_completed_daily_run_skips_before_starting_emulator(
+        self,
+        emulator_controller: Mock,
+        adb_client: Mock,
+        _limit_reached_today: Mock,
+        load_settings: Mock,
+    ) -> None:
+        load_settings.return_value = Settings(
+            package="com.example.school.mockads",
+            execution_enabled=True,
+            daily_run_enabled=True,
+        )
+
+        self.assertEqual(start.run(start.DEFAULT_CONFIG), 0)
+        adb_client.assert_not_called()
+        emulator_controller.assert_not_called()
+
+    @patch("start.load_settings")
     @patch("start.AdbClient")
     @patch("start.EmulatorController")
     @patch("start.preview_once")
@@ -94,6 +115,39 @@ class StartTests(unittest.TestCase):
             adb_client.return_value
         )
         emulator_controller.return_value.close.assert_called_once_with()
+
+    @patch("start.load_settings")
+    @patch("start.limit_reached_today", return_value=False)
+    @patch("start.mark_limit_reached")
+    @patch("start.AdbClient")
+    @patch("start.EmulatorController")
+    @patch("start.run_startup_navigation")
+    @patch("start.run_live")
+    def test_limit_result_records_daily_completion(
+        self,
+        run_live: Mock,
+        _run_startup_navigation: Mock,
+        emulator_controller: Mock,
+        _adb_client: Mock,
+        mark_limit_reached: Mock,
+        _limit_reached_today: Mock,
+        load_settings: Mock,
+    ) -> None:
+        settings = Settings(
+            package="com.example.school.mockads",
+            execution_enabled=True,
+            daily_run_enabled=True,
+        )
+        load_settings.return_value = settings
+        emulator_controller.return_value.wait_for_frame.return_value = (
+            "emulator-5554",
+            Mock(),
+        )
+        run_live.return_value = AutomationResult("limit", 8)
+        mark_limit_reached.return_value = start.PROJECT_DIR / "session.json"
+
+        self.assertEqual(start.run(start.DEFAULT_CONFIG), 0)
+        mark_limit_reached.assert_called_once_with(settings)
 
     @patch("start.load_settings")
     @patch("start.AdbClient")

@@ -7,6 +7,8 @@
   "startup_navigation_timeout_seconds": 90.0,
   "close_emulator_on_limit": true,
   "close_emulator_on_exit": true,
+  "daily_run_enabled": true,
+  "daily_state_file": "session.json",
   "package": "com.netease.cloudmusic",
   "deep_link": "",
   "threshold": 0.86,

@@ -4,3 +4,5 @@ __pycache__/
 debug/
 templates/*_20*.png
 session.json
+session.json.tmp
+logs/

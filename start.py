@@ -8,6 +8,7 @@ from pathlib import Path
 from wyy_assist.adb import AdbClient, AdbError
 from wyy_assist.automation import preview_once, run_live, run_startup_navigation
 from wyy_assist.config import load_settings
+from wyy_assist.daily import limit_reached_today, mark_limit_reached
 from wyy_assist.emulator import EmulatorController, EmulatorError
 from wyy_assist.executor import ExecutionBlocked
 
@@ -38,6 +39,16 @@ def build_parser() -> argparse.ArgumentParser:
 
 def run(config_path: Path) -> int:
     settings = load_settings(config_path)
+    daily_tracking = (
+        settings.daily_run_enabled
+        and settings.execution_enabled
+        and package_is_configured(settings.package)
+    )
+    if daily_tracking and limit_reached_today(settings):
+        print(f"配置文件：{config_path}")
+        print("[每日] 今日已经检测到 limit，跳过本次运行；明日自动恢复。")
+        return 0
+
     adb = AdbClient(settings.adb_path, settings.serial)
     emulator = EmulatorController(settings)
     result = None
@@ -66,6 +77,9 @@ def run(config_path: Path) -> int:
             print("\n测试点击已开启，先执行启动识别，再进入连续状态机。按 Ctrl+C 可随时停止。\n")
             run_startup_navigation(settings, adb, execute_requested=True)
             result = run_live(settings, adb, execute_requested=True)
+            if result.reason == "limit" and daily_tracking:
+                saved_path = mark_limit_reached(settings)
+                print(f"[每日] 已记录今日 limit：{saved_path}")
     finally:
         close_for_limit = (
             result is not None
