@@ -8,12 +8,28 @@ import numpy as np
 
 from wyy_assist.config import load_settings
 from wyy_assist.vision import StateRecognizer
+from wyy_assist.recovery import recovery_recognizer
 
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 class PackagedReferenceTests(unittest.TestCase):
+    def test_recovery_finds_relocated_exit_glyphs_without_changing_config(self) -> None:
+        settings = load_settings(ROOT / "config.json")
+        before = settings.to_dict()
+        recognizer = recovery_recognizer(settings)
+        for item in recognizer.templates:
+            with self.subTest(template=item.path.name):
+                screen = np.zeros((1920, 1080, 3), dtype=np.uint8)
+                height, width = item.image.shape
+                # Deliberately outside each template's normal screen region.
+                screen[600:600 + height, 320:320 + width] = cv2.cvtColor(item.image, cv2.COLOR_GRAY2BGR)
+                matched = recognizer.best_match(screen, allowed_states={item.state})
+                self.assertIsNotNone(matched)
+                self.assertEqual(matched.center, (320 + width // 2, 600 + height // 2))
+        self.assertEqual(before, settings.to_dict())
+
     def test_top_ad_close_icon_is_classified_as_close_not_interaction(self) -> None:
         settings = load_settings(ROOT / "config.json")
         interaction_paths = {spec.path for spec in settings.templates["ad_interaction"]}

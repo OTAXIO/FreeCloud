@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import subprocess
+import time
+from contextlib import contextmanager
 from pathlib import Path
 
 import cv2
@@ -17,6 +19,16 @@ class AdbClient:
     def __init__(self, adb_path: str | Path, serial: str = "") -> None:
         self.adb_path = Path(adb_path).expanduser()
         self.serial = serial.strip()
+        self._command_deadline: float | None = None
+
+    @contextmanager
+    def command_deadline(self, deadline: float):
+        previous = self._command_deadline
+        self._command_deadline = min(previous, deadline) if previous is not None else deadline
+        try:
+            yield
+        finally:
+            self._command_deadline = previous
 
     def _base_command(self) -> list[str]:
         command = [str(self.adb_path)]
@@ -28,6 +40,11 @@ class AdbClient:
         if not self.adb_path.is_file():
             raise AdbError(f"ADB 不存在: {self.adb_path}")
         command = [*self._base_command(), *args]
+        if self._command_deadline is not None:
+            remaining = self._command_deadline - time.monotonic()
+            if remaining <= 0:
+                raise AdbError("恢复操作已超过时间限制")
+            timeout = min(timeout, remaining)
         try:
             result = subprocess.run(
                 command,
@@ -35,9 +52,12 @@ class AdbClient:
                 stderr=subprocess.PIPE,
                 check=False,
                 timeout=timeout,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
         except subprocess.TimeoutExpired as exc:
             raise AdbError(f"ADB 命令超时: {' '.join(command)}") from exc
+        except OSError as exc:
+            raise AdbError(f"ADB 命令无法执行: {exc}") from exc
         if result.returncode != 0:
             detail = result.stderr.decode("utf-8", errors="replace").strip()
             raise AdbError(detail or f"ADB 命令失败，退出码 {result.returncode}")

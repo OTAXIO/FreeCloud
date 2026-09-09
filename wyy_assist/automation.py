@@ -4,12 +4,13 @@ import time
 from dataclasses import dataclass
 from enum import Enum
 
-from .actions import Action, ActionKind, ActionPlanner
+from .actions import ActionPlanner
 from .adb import AdbClient, AdbError
-from .executor import ActionExecutor
+from .executor import ActionExecutor, ExecutionBlocked
 from .model import Settings
 from .tracker import StableStateTracker
 from .vision import StateRecognizer
+from .recovery import RecoveryFailed, RESUME_STATES, recover_page
 
 
 @dataclass(frozen=True)
@@ -208,6 +209,7 @@ def run_startup_navigation(
     action_state: str | None = None
     action_count = 0
     last_action_at: float | None = None
+    unknown_since: float | None = None
     try:
         foreground = adb.foreground_window()
     except AdbError:
@@ -236,6 +238,15 @@ def run_startup_navigation(
             else:
                 startup_states = {"launcher_icon"}
             match = recognizer.best_match(screen, allowed_states=startup_states)
+        if match is None and app_launch_requested:
+            if unknown_since is None:
+                unknown_since = time.monotonic()
+            if time.monotonic() - unknown_since >= 3.0:
+                recovered = recover_page(settings, adb, recognizer, executor,
+                                         cause="应用启动后页面未识别")
+                return AutomationResult(f"startup-{recovered.state}", transitions)
+        else:
+            unknown_since = None
         transition = tracker.observe(match.state if match is not None else None)
         if match is None or transition is None:
             time.sleep(settings.poll_interval_seconds)
@@ -262,28 +273,69 @@ def run_startup_navigation(
             action_count += 1
             last_action_at = time.monotonic()
         elif action_state == match.state and action_count >= 3 and retry_due:
-            raise RuntimeError(f"启动页面 {match.state} 连续点击 3 次后仍未变化")
+            recovered = recover_page(settings, adb, recognizer, executor,
+                                     cause=f"启动页面 {match.state} 连续点击 3 次后仍未变化")
+            return AutomationResult(f"startup-{recovered.state}", transitions)
 
         time.sleep(settings.poll_interval_seconds)
 
-    raise RuntimeError(
-        f"启动导航超过 {settings.startup_navigation_timeout_seconds:.1f} 秒，"
-        "未识别到应用图标、跳过按钮或原状态机页面"
-    )
+    recovered = recover_page(settings, adb, recognizer, executor, cause="启动导航超时")
+    return AutomationResult(f"startup-{recovered.state}", transitions)
 
 
 def run_live(settings: Settings, adb: AdbClient, *, execute_requested: bool) -> AutomationResult:
+    transitions = 0
+    recoveries_without_progress = 0
+    while transitions < 100:
+        cycle = AdCycleTimer(settings.minimum_ad_seconds, settings.ad_post_click_wait_seconds)
+        try:
+            result = _run_live_attempt(settings, adb, execute_requested=execute_requested, ad_cycle=cycle)
+            transitions += result.transitions
+            if result.reason == "limit":
+                return AutomationResult("limit", transitions)
+            cause = result.reason
+            if result.transitions >= 2:
+                recoveries_without_progress = 0
+        except (AdbError, ExecutionBlocked) as exc:
+            cause = str(exc)
+            # A transient screenshot/foreground failure cannot authorize an
+            # early Back or close while a previously started wait is locked.
+            wait_until = None
+            if cycle.phase is AdCyclePhase.PRE_CLICK and cycle.entered_at is not None:
+                wait_until = cycle.entered_at + cycle.pre_click_seconds
+            elif cycle.phase is AdCyclePhase.POST_CLICK and cycle.clicked_at is not None:
+                wait_until = cycle.clicked_at + cycle.post_click_seconds
+            if wait_until is not None:
+                remaining = wait_until - time.monotonic()
+                if remaining > 0:
+                    time.sleep(remaining)
+        recoveries_without_progress += 1
+        if recoveries_without_progress > 3:
+            raise RecoveryFailed(f"本次运行失败：连续恢复后仍无法推进流程（{cause}）")
+        blocked = cause.removeprefix("stalled-") if cause.startswith("stalled-") else None
+        recovered = recover_page(
+            settings, adb, StateRecognizer(settings),
+            ActionExecutor(settings, adb, execute_requested=execute_requested),
+            cause=cause, blocked_state=blocked,
+        )
+        if recovered.state == "limit":
+            return AutomationResult("limit", transitions)
+    raise RecoveryFailed("本次运行失败：状态转换次数达到限制，仍未识别到 limit")
+
+
+def _run_live_attempt(
+    settings: Settings, adb: AdbClient, *, execute_requested: bool,
+    ad_cycle: AdCycleTimer | None = None,
+) -> AutomationResult:
     executor = ActionExecutor(settings, adb, execute_requested=execute_requested)
     executor.verify_live_execution()
     recognizer = StateRecognizer(settings)
     runtime_states = runtime_recognition_states(settings)
     planner = ActionPlanner(settings)
     tracker = StableStateTracker(settings.consecutive_hits)
-    last_known_at = time.monotonic()
     transitions = 0
     retry_policy = StateRetryPolicy()
-    unknown_fallback = UnknownCenterFallback()
-    ad_cycle = AdCycleTimer(
+    ad_cycle = ad_cycle or AdCycleTimer(
         pre_click_seconds=settings.minimum_ad_seconds,
         post_click_seconds=settings.ad_post_click_wait_seconds,
     )
@@ -309,8 +361,11 @@ def run_live(settings: Settings, adb: AdbClient, *, execute_requested: bool) -> 
         state = match.state if match is not None else None
 
         limit_hits = limit_hits + 1 if state == "limit" else 0
-        if limit_hits >= settings.consecutive_hits:
-            return AutomationResult("limit", transitions)
+        if state == "limit":
+            if limit_hits >= settings.consecutive_hits:
+                return AutomationResult("limit", transitions)
+            time.sleep(settings.poll_interval_seconds)
+            continue
 
         timer_event = ad_cycle.observe_screen(state, now)
         if timer_event == "entered":
@@ -323,6 +378,8 @@ def run_live(settings: Settings, adb: AdbClient, *, execute_requested: bool) -> 
 
         if ad_cycle.phase is AdCyclePhase.PRE_CLICK:
             if ad_cycle.interaction_due(now):
+                if state in RESUME_STATES:
+                    return AutomationResult("unexpected-page-before-interaction", transitions)
                 executor.run(planner.ad_interaction_tap((screen.shape[1], screen.shape[0])))
                 ad_cycle.mark_interaction(time.monotonic())
                 print(
@@ -338,9 +395,11 @@ def run_live(settings: Settings, adb: AdbClient, *, execute_requested: bool) -> 
                 continue
             print("[计时] 点击后停留已完成；现在允许取消下载、返回或关闭广告")
             retry_policy = StateRetryPolicy()
-            unknown_fallback.reset()
+            tracker = StableStateTracker(settings.consecutive_hits)
 
         if ad_cycle.phase is AdCyclePhase.AWAITING_ENTRY:
+            if state not in {"ready", "limit"}:
+                return AutomationResult("unexpected-page-after-entry", transitions)
             time.sleep(settings.poll_interval_seconds)
             continue
 
@@ -348,30 +407,13 @@ def run_live(settings: Settings, adb: AdbClient, *, execute_requested: bool) -> 
             if state == "ready":
                 ad_cycle.reset()
                 retry_policy = StateRetryPolicy()
-                unknown_fallback.reset()
+                tracker = StableStateTracker(settings.consecutive_hits)
             elif state in {"ad", "ad_interaction"}:
-                # The close glyph may need another frame to become recognizable.
-                # Never restart the 15+10 second sequence within the same cycle.
-                time.sleep(settings.poll_interval_seconds)
-                continue
+                return AutomationResult("ad-exit-not-found", transitions)
 
         if match is None:
-            if unknown_fallback.should_click(tracker.current, now):
-                center = (screen.shape[1] // 2, screen.shape[0] // 2)
-                executor.run(
-                    Action(
-                        ActionKind.TAP,
-                        "广告测试画面未识别，执行一次屏幕中心回退点击",
-                        point=center,
-                    )
-                )
-            if now - last_known_at >= settings.unknown_timeout_seconds:
-                return AutomationResult("unknown-timeout", transitions)
-            time.sleep(settings.poll_interval_seconds)
-            continue
+            return AutomationResult("unexpected-page", transitions)
 
-        unknown_fallback.reset()
-        last_known_at = now
         transition = tracker.observe(match.state)
         state_changed = transition is not None and transition.changed
         if state_changed:

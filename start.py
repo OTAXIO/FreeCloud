@@ -6,11 +6,12 @@ import sys
 from pathlib import Path
 
 from wyy_assist.adb import AdbClient, AdbError
-from wyy_assist.automation import preview_once, run_live, run_startup_navigation
+from wyy_assist.automation import AutomationResult, preview_once, run_live, run_startup_navigation
 from wyy_assist.config import load_settings
 from wyy_assist.daily import limit_reached_today, mark_limit_reached
 from wyy_assist.emulator import EmulatorController, EmulatorError
 from wyy_assist.executor import ExecutionBlocked
+from wyy_assist.supervisor import supervise, watch_parent
 
 # com.netease.cloudmusic
 PROJECT_DIR = Path(__file__).resolve().parent
@@ -34,6 +35,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="一键启动移动端图像识别测试")
     parser.add_argument("--config", help="指定配置文件；默认使用 config.json")
     parser.add_argument("--no-pause", action="store_true", help="结束时不等待按 Enter")
+    parser.add_argument("--autorun", action="store_true", help="开机自动运行，遵守本次开机放弃记录")
+    parser.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--parent-pid", type=int, help=argparse.SUPPRESS)
     return parser
 
 
@@ -53,14 +57,14 @@ def run(config_path: Path) -> int:
     emulator = EmulatorController(settings)
     result = None
     emulator_shutdown_armed = False
+    live = settings.execution_enabled and package_is_configured(settings.package)
 
     print(f"配置文件：{config_path}")
     print(f"目标包名：{settings.package}")
     print(f"点击开关：{'开启' if settings.execution_enabled else '关闭'}")
     try:
         emulator.launch_if_needed(adb)
-        # Arm cleanup as soon as the player launch/show request succeeds. If
-        # ADB never becomes ready, the instance must still be closed on exit.
+        # Remember whether launch succeeded; cleanup still requires completion.
         emulator_shutdown_armed = True
         device, _ = emulator.wait_for_frame(adb)
         print(f"ADB 设备：{device}")
@@ -75,8 +79,11 @@ def run(config_path: Path) -> int:
             result = preview_once(settings, adb)
         else:
             print("\n测试点击已开启，先执行启动识别，再进入连续状态机。按 Ctrl+C 可随时停止。\n")
-            run_startup_navigation(settings, adb, execute_requested=True)
-            result = run_live(settings, adb, execute_requested=True)
+            startup_result = run_startup_navigation(settings, adb, execute_requested=True)
+            if startup_result.reason == "startup-limit":
+                result = AutomationResult("limit", startup_result.transitions)
+            else:
+                result = run_live(settings, adb, execute_requested=True)
             if result.reason == "limit" and daily_tracking:
                 saved_path = mark_limit_reached(settings)
                 print(f"[每日] 已记录今日 limit：{saved_path}")
@@ -86,12 +93,15 @@ def run(config_path: Path) -> int:
             and result.reason == "limit"
             and settings.close_emulator_on_limit
         )
-        if emulator_shutdown_armed and (settings.close_emulator_on_exit or close_for_limit):
+        # A failure remains visible for recovery/the retry dialog. Only a
+        # confirmed limit (or a completed preview) permits automatic shutdown.
+        completed = result is not None and (not live or result.reason == "limit")
+        if emulator_shutdown_armed and completed and (settings.close_emulator_on_exit or close_for_limit):
             emulator.close()
 
     assert result is not None
     print(f"\n程序结束：{result.reason}；状态转换 {result.transitions} 次")
-    return 0
+    return 0 if not live or result.reason == "limit" else 2
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -99,15 +109,18 @@ def main(argv: list[str] | None = None) -> int:
     os.chdir(PROJECT_DIR)
     code = 0
     try:
-        code = run(choose_config(args.config))
+        config_path = choose_config(args.config)
+        if args.worker and args.parent_pid:
+            watch_parent(args.parent_pid)
+        code = run(config_path) if args.worker else supervise(config_path, autorun=args.autorun)
     except KeyboardInterrupt:
         print("\n已由用户停止。")
         code = 130
-    except (AdbError, EmulatorError, ExecutionBlocked, FileNotFoundError, ValueError, RuntimeError) as exc:
+    except (AdbError, EmulatorError, ExecutionBlocked, OSError, ValueError, RuntimeError) as exc:
         print(f"\n启动失败：{exc}", file=sys.stderr)
         code = 2
     finally:
-        if not args.no_pause and sys.stdin.isatty():
+        if not args.no_pause and not args.autorun and sys.stdin.isatty():
             try:
                 input("\n按 Enter 关闭窗口……")
             except (EOFError, KeyboardInterrupt):

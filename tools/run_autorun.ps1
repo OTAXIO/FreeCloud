@@ -2,37 +2,28 @@ $ErrorActionPreference = "Stop"
 
 $projectDirectory = Split-Path -Parent $PSScriptRoot
 $startScript = Join-Path $projectDirectory "start.py"
-$logDirectory = Join-Path $projectDirectory "logs"
-$logPath = Join-Path $logDirectory "autorun.log"
 $preferredPython = "D:\Basement\Miniconda3\envs\jiaoworun\python.exe"
-
-New-Item -ItemType Directory -Force -Path $logDirectory | Out-Null
-Add-Content -LiteralPath $logPath -Value "`r`n===== $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') ====="
-
-if (Test-Path -LiteralPath $preferredPython -PathType Leaf) {
-    $python = $preferredPython
-}
-else {
-    $pythonCommand = Get-Command python.exe -ErrorAction SilentlyContinue
-    if ($null -eq $pythonCommand) {
-        Add-Content -LiteralPath $logPath -Value "找不到 Python：$preferredPython"
-        exit 2
-    }
-    $python = $pythonCommand.Source
-}
-
-Push-Location $projectDirectory
 try {
-    & $python $startScript --no-pause *>> $logPath
-    $exitCode = $LASTEXITCODE
+    if (Test-Path -LiteralPath $preferredPython -PathType Leaf) {
+        $python = $preferredPython
+    }
+    else {
+        $python = (Get-Command python.exe -ErrorAction Stop).Source
+    }
+    Push-Location $projectDirectory
+    try {
+        # Python supervises its worker and writes UTF-8 logs. PS 5.1 redirection
+        # previously turned native stderr into a terminating NativeCommandError.
+        $ErrorActionPreference = "Continue"
+        & $python -u $startScript --no-pause --autorun
+        $exitCode = $LASTEXITCODE
+    }
+    finally { Pop-Location }
 }
 catch {
-    $_ | Out-String | Add-Content -LiteralPath $logPath
+    Add-Type -AssemblyName System.Windows.Forms
+    [System.Windows.Forms.MessageBox]::Show(
+        "自动运行启动失败：$($_.Exception.Message)", "启动失败") | Out-Null
     $exitCode = 2
 }
-finally {
-    Pop-Location
-}
-
-Add-Content -LiteralPath $logPath -Value "退出码：$exitCode"
 exit $exitCode

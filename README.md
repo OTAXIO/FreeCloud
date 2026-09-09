@@ -41,8 +41,23 @@ Set-Location 'D:\others\TOOLS\wyy_code'
 1. 当前用户登录 Windows 时，用于每次开机登录后自动执行。
 2. 每日 00:05；如果当时关机或任务未能运行，Windows 会在之后可用时补跑。
 
-两个触发器共用同一套每日判定，因此同一天不会在检测到 `limit` 后重复执行。后台输出
-保存在 `logs/autorun.log`。如不再需要，双击 `卸载开机自启.bat` 即可删除计划任务。
+两个触发器共用同一套每日判定，因此同一天不会在检测到 `limit` 后重复执行。开机自动
+运行时，命令窗口以最小化状态启动；每次尝试的 UTF-8 日志保存在 `logs/run-日期时间.log`。
+之前的 `logs/autorun.log` 保留作历史记录。如不再需要，双击 `卸载开机自启.bat` 即可删除
+计划任务。脚本更新后重新运行安装脚本，会更新同一个任务。
+
+程序未达到 `limit` 就退出、崩溃或被 Ctrl+C 中断时，会弹出置顶窗口：
+
+- **继续**：重新启动执行进程，从模拟器启动检查开始再尝试一遍。
+- **放弃**（包括关闭弹窗）：在 `session.control.json` 中记录本次开机标识，本次开机的
+  后续自动触发都会跳过；不会写入今日完成日期。手动运行 `start.py` 可再尝试。
+
+开机标识取自 Windows 的 [LastBootUpTime](https://learn.microsoft.com/en-us/windows/win32/cimwin32prov/win32-operatingsystem)
+（操作系统启动时间）；跨天不会清除“本次开机放弃”，系统重新启动后才失效。Windows
+快速启动可能延续内核会话，需要明确刷新开机标识时使用“重新启动”。
+正常完成后按原配置关闭模拟器；失败或放弃时保留模拟器现场。手动启动和自动触发共用
+单实例限制，避免两份流程同时点击。运行管理进程监督执行进程；若管理进程也被任务管理器
+强制结束或 Windows 正在关机，无法当场弹窗，执行进程会随之停止，且不记录为完成。
 
 默认包名为 `none` 时，程序只识别当前画面并打印下一步动作。要在独立测试 APK 中执行
 连续状态机，只需要修改 `config.json` 的包名：
@@ -84,9 +99,13 @@ Set-Location 'D:\others\TOOLS\wyy_code'
 拼图或整块按钮作为判断依据。连续两帧达到独立阈值 `0.88` 后，状态机立即以 `limit`
 结束；该判断位于广告计时和所有点击动作之前。
 
-如果从 `ready` 或 `ad_interaction` 进入未知画面，持续 3 秒仍未识别到模板时，状态机只
-执行一次屏幕中心回退点击。可重试状态在动作后没有变化时，每 3 秒重试一次，最多执行
-3 次，以免无限点击。
+未知页面、状态停滞或点击后未按预期推进，会进入独立的 **30 秒恢复阶段**。正常等待
+阶段结束后，优先全屏匹配已有的取消、叉和返回箭头模板；找不到时尝试 Android 返回键，
+动作之间至少间隔 3 秒。恢复不会执行未知画面的中心点击、下载或确认。
+每次恢复使用固定截止时间，识别到叉或切换弹窗不会重置计时；ADB 命令也受剩余时间限制。
+只有连续确认回到首页、免费听或拼图入口等正常页面（且没有识别到覆盖弹窗）才继续主流程。
+一直停在原来的故障页面不算恢复。30 秒仍未恢复则报“本次运行失败”，进入继续/放弃弹窗。
+可重试状态仍保留原有的 3 次点击尝试，之后交给恢复流程处理。
 
 ## 环境和检查
 
@@ -157,7 +176,7 @@ Set-Location 'D:\others\TOOLS\wyy_code'
 - `emulator_start_timeout_seconds`：等待 ADB 设备和首张截图的最长时间。
 - `startup_navigation_timeout_seconds`：启动图标/跳过页导航的最长时间。
 - `close_emulator_on_limit`：识别到 `limit` 后是否关闭配置实例。
-- `close_emulator_on_exit`：程序正常结束、超时或被 Ctrl+C 停止时是否关闭模拟器。
+- `close_emulator_on_exit`：完成流程或单帧演练结束后是否关闭模拟器；运行失败时保留现场。
 - `daily_run_enabled`：是否启用“当天检测到 limit 后不再运行”的日期判断。
 - `daily_state_file`：保存 `last_limit_date` 的本地 JSON 文件，默认 `session.json`。
 - `serial`：多设备时指定 `adb devices` 显示的序列号。
@@ -172,7 +191,7 @@ Set-Location 'D:\others\TOOLS\wyy_code'
 - `consecutive_hits`：确认状态所需的连续命中帧数。
 - `minimum_ad_seconds`：进入广告页后的互动前等待时间，当前为 15 秒。
 - `ad_post_click_wait_seconds`：互动后等待时间，当前为 10 秒。
-- `unknown_timeout_seconds`：持续无法识别后的停止时间。
+- `unknown_timeout_seconds`：只读监控的未知状态超时；连续执行的恢复阶段固定为 30 秒。
 - `ad_interaction_point`：广告测试互动点的归一化坐标。
 - `download_cancel_point`：下载测试弹窗取消点的归一化坐标。
 

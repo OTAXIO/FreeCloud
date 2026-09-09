@@ -19,9 +19,9 @@ if ($Uninstall) {
 
 $projectDirectory = Split-Path -Parent $PSScriptRoot
 $runner = Join-Path $PSScriptRoot "run_autorun.ps1"
-$powershell = Join-Path $PSHOME "powershell.exe"
+$powershell = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
 $userId = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
-$arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$runner`""
+$arguments = "-NoProfile -NonInteractive -WindowStyle Minimized -ExecutionPolicy Bypass -File `"$runner`""
 
 $action = New-ScheduledTaskAction `
     -Execute $powershell `
@@ -32,7 +32,9 @@ $dailyTrigger = New-ScheduledTaskTrigger -Daily -At "00:05"
 $settings = New-ScheduledTaskSettingsSet `
     -StartWhenAvailable `
     -MultipleInstances IgnoreNew `
-    -ExecutionTimeLimit (New-TimeSpan -Hours 3)
+    -AllowStartIfOnBatteries `
+    -DontStopIfGoingOnBatteries `
+    -ExecutionTimeLimit ([TimeSpan]::Zero)
 $principal = New-ScheduledTaskPrincipal `
     -UserId $userId `
     -LogonType Interactive `

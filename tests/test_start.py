@@ -178,7 +178,7 @@ class StartTests(unittest.TestCase):
     @patch("start.load_settings")
     @patch("start.AdbClient")
     @patch("start.EmulatorController")
-    def test_wait_failure_still_closes_launched_emulator(
+    def test_wait_failure_keeps_emulator_for_retry_dialog(
         self,
         emulator_controller: Mock,
         adb_client: Mock,
@@ -196,7 +196,36 @@ class StartTests(unittest.TestCase):
         with self.assertRaisesRegex(EmulatorError, "ADB frame timeout"):
             start.run(start.DEFAULT_CONFIG)
 
-        emulator_controller.return_value.close.assert_called_once_with()
+        emulator_controller.return_value.close.assert_not_called()
+
+    def test_unfinished_run_is_failure_and_keeps_emulator(self) -> None:
+        settings = Settings(package="com.example.school.mockads", execution_enabled=True,
+                            daily_run_enabled=True)
+        with patch("start.load_settings", return_value=settings), \
+             patch("start.limit_reached_today", return_value=False), \
+             patch("start.mark_limit_reached") as mark, \
+             patch("start.AdbClient"), patch("start.EmulatorController") as controller, \
+             patch("start.run_startup_navigation", return_value=AutomationResult("startup-home", 1)), \
+             patch("start.run_live", return_value=AutomationResult("stalled-ready", 3)):
+            controller.return_value.wait_for_frame.return_value = ("emulator-5554", Mock())
+            self.assertEqual(start.run(start.DEFAULT_CONFIG), 2)
+            controller.return_value.close.assert_not_called()
+            mark.assert_not_called()
+
+    def test_limit_during_startup_is_saved_without_starting_another_cycle(self) -> None:
+        settings = Settings(package="com.example.school.mockads", execution_enabled=True,
+                            daily_run_enabled=True)
+        with patch("start.load_settings", return_value=settings), \
+             patch("start.limit_reached_today", return_value=False), \
+             patch("start.mark_limit_reached") as mark, \
+             patch("start.AdbClient"), patch("start.EmulatorController") as controller, \
+             patch("start.run_startup_navigation", return_value=AutomationResult("startup-limit", 1)), \
+             patch("start.run_live") as live:
+            controller.return_value.wait_for_frame.return_value = ("emulator-5554", Mock())
+            self.assertEqual(start.run(start.DEFAULT_CONFIG), 0)
+            controller.return_value.close.assert_called_once()
+            mark.assert_called_once_with(settings)
+            live.assert_not_called()
 
 
 if __name__ == "__main__":
