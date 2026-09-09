@@ -90,8 +90,8 @@ class EmulatorController:
     def close(self) -> None:
         executable = self.executable
         candidates = [
-            executable.with_name("dnconsole.exe"),
             executable.with_name("ldconsole.exe"),
+            executable.with_name("dnconsole.exe"),
         ]
         console = next((path for path in candidates if path.is_file()), None)
         if console is None:

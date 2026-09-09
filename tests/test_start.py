@@ -50,7 +50,7 @@ class StartTests(unittest.TestCase):
         preview_once.assert_called_once()
         run_startup_navigation.assert_not_called()
         run_live.assert_not_called()
-        emulator_controller.return_value.close.assert_not_called()
+        emulator_controller.return_value.close.assert_called_once_with()
 
     @patch("start.load_settings")
     @patch("start.AdbClient")
@@ -93,6 +93,32 @@ class StartTests(unittest.TestCase):
             adb_client.return_value
         )
         emulator_controller.return_value.close.assert_called_once_with()
+
+    @patch("start.load_settings")
+    @patch("start.AdbClient")
+    @patch("start.EmulatorController")
+    @patch("start.preview_once")
+    def test_close_on_exit_can_be_disabled(
+        self,
+        preview_once: Mock,
+        emulator_controller: Mock,
+        adb_client: Mock,
+        load_settings: Mock,
+    ) -> None:
+        load_settings.return_value = Settings(
+            package="none",
+            execution_enabled=True,
+            close_emulator_on_exit=False,
+            close_emulator_on_limit=False,
+        )
+        emulator_controller.return_value.wait_for_frame.return_value = (
+            "emulator-5554",
+            Mock(),
+        )
+        preview_once.return_value = AutomationResult("unknown", 0)
+
+        self.assertEqual(start.run(start.DEFAULT_CONFIG), 0)
+        emulator_controller.return_value.close.assert_not_called()
 
 
 if __name__ == "__main__":

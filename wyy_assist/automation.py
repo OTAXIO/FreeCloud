@@ -208,10 +208,18 @@ def run_startup_navigation(
     action_state: str | None = None
     action_count = 0
     last_action_at: float | None = None
+    app_launch_requested = False
 
     while time.monotonic() < deadline:
         screen = adb.screenshot()
-        match = recognizer.best_match(screen)
+        # The home marker is cheap to match and ends startup immediately. Before
+        # the app icon is clicked, never search/click the splash skip template.
+        match = recognizer.best_match(screen, allowed_states={"home"})
+        if match is None:
+            startup_states = {"launcher_icon"}
+            if app_launch_requested:
+                startup_states.add("splash_skip")
+            match = recognizer.best_match(screen, allowed_states=startup_states)
         transition = tracker.observe(match.state if match is not None else None)
         if match is None or transition is None:
             time.sleep(settings.poll_interval_seconds)
@@ -232,6 +240,8 @@ def run_startup_navigation(
         if retry_due and action_count < 3:
             actions = planner.plan(match, (screen.shape[1], screen.shape[0]))
             executor.run_all(actions, require_target_foreground=False)
+            if match.state == "launcher_icon":
+                app_launch_requested = True
             action_state = match.state
             action_count += 1
             last_action_at = time.monotonic()

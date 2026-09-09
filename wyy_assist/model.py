@@ -84,6 +84,7 @@ class Settings:
     emulator_start_timeout_seconds: float = 180.0
     startup_navigation_timeout_seconds: float = 90.0
     close_emulator_on_limit: bool = True
+    close_emulator_on_exit: bool = True
     package: str = "none"
     deep_link: str = ""
     threshold: float = 0.86
@@ -137,6 +138,7 @@ class Settings:
             emulator_start_timeout_seconds=float(value.get("emulator_start_timeout_seconds", 180.0)),
             startup_navigation_timeout_seconds=float(value.get("startup_navigation_timeout_seconds", 90.0)),
             close_emulator_on_limit=bool(value.get("close_emulator_on_limit", True)),
+            close_emulator_on_exit=bool(value.get("close_emulator_on_exit", True)),
             package=str(value.get("package", "none")),
             deep_link=str(value.get("deep_link", "")),
             threshold=float(value.get("threshold", 0.86)),
@@ -212,6 +214,7 @@ class Settings:
             "emulator_start_timeout_seconds": self.emulator_start_timeout_seconds,
             "startup_navigation_timeout_seconds": self.startup_navigation_timeout_seconds,
             "close_emulator_on_limit": self.close_emulator_on_limit,
+            "close_emulator_on_exit": self.close_emulator_on_exit,
             "package": self.package,
             "deep_link": self.deep_link,
             "threshold": self.threshold,

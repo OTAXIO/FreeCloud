@@ -40,30 +40,40 @@ def run(config_path: Path) -> int:
     settings = load_settings(config_path)
     adb = AdbClient(settings.adb_path, settings.serial)
     emulator = EmulatorController(settings)
+    result = None
+    emulator_ready = False
 
     print(f"配置文件：{config_path}")
     print(f"目标包名：{settings.package}")
     print(f"点击开关：{'开启' if settings.execution_enabled else '关闭'}")
-    emulator.launch_if_needed(adb)
-    device, _ = emulator.wait_for_frame(adb)
-    print(f"ADB 设备：{device}")
+    try:
+        emulator.launch_if_needed(adb)
+        device, _ = emulator.wait_for_frame(adb)
+        emulator_ready = True
+        print(f"ADB 设备：{device}")
 
-    if not package_is_configured(settings.package):
-        print("\n目标包名尚未配置，将只识别当前页面并演练下一步动作。")
-        print("填写 config.json 的 package 后，双击启动即可进入连续状态机。\n")
-        result = preview_once(settings, adb)
-    elif not settings.execution_enabled:
-        print("\n点击功能当前关闭，将只识别当前页面并演练下一步动作。")
-        print("若要测试连续点击，请在 config.json 中启用 execution_enabled。\n")
-        result = preview_once(settings, adb)
-    else:
-        print("\n测试点击已开启，先执行启动识别，再进入连续状态机。按 Ctrl+C 可随时停止。\n")
-        run_startup_navigation(settings, adb, execute_requested=True)
-        result = run_live(settings, adb, execute_requested=True)
+        if not package_is_configured(settings.package):
+            print("\n目标包名尚未配置，将只识别当前页面并演练下一步动作。")
+            print("填写 config.json 的 package 后，双击启动即可进入连续状态机。\n")
+            result = preview_once(settings, adb)
+        elif not settings.execution_enabled:
+            print("\n点击功能当前关闭，将只识别当前页面并演练下一步动作。")
+            print("若要测试连续点击，请在 config.json 中启用 execution_enabled。\n")
+            result = preview_once(settings, adb)
+        else:
+            print("\n测试点击已开启，先执行启动识别，再进入连续状态机。按 Ctrl+C 可随时停止。\n")
+            run_startup_navigation(settings, adb, execute_requested=True)
+            result = run_live(settings, adb, execute_requested=True)
+    finally:
+        close_for_limit = (
+            result is not None
+            and result.reason == "limit"
+            and settings.close_emulator_on_limit
+        )
+        if emulator_ready and (settings.close_emulator_on_exit or close_for_limit):
+            emulator.close()
 
-    if result.reason == "limit" and settings.close_emulator_on_limit:
-        emulator.close()
-
+    assert result is not None
     print(f"\n程序结束：{result.reason}；状态转换 {result.transitions} 次")
     return 0
 

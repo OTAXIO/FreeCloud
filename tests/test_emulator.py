@@ -71,7 +71,7 @@ class EmulatorTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             player = root / "dnplayer.exe"
-            console = root / "dnconsole.exe"
+            console = root / "ldconsole.exe"
             player.touch()
             console.touch()
             runner = Mock(return_value=Mock(returncode=0, stderr=b""))
@@ -84,6 +84,22 @@ class EmulatorTests(unittest.TestCase):
                 runner.call_args.args[0],
                 [str(console), "quit", "--index", "2"],
             )
+
+    def test_close_prefers_ldconsole_when_both_console_files_exist(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            player = root / "dnplayer.exe"
+            ldconsole = root / "ldconsole.exe"
+            player.touch()
+            ldconsole.touch()
+            (root / "dnconsole.exe").touch()
+            runner = Mock(return_value=Mock(returncode=0, stderr=b""))
+            controller = EmulatorController(
+                Settings(emulator_path=str(player)),
+                runner=runner,
+            )
+            controller.close()
+            self.assertEqual(runner.call_args.args[0][0], str(ldconsole))
 
 
 if __name__ == "__main__":

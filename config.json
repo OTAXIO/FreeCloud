@@ -6,6 +6,7 @@
   "emulator_start_timeout_seconds": 180.0,
   "startup_navigation_timeout_seconds": 90.0,
   "close_emulator_on_limit": true,
+  "close_emulator_on_exit": true,
   "package": "com.netease.cloudmusic",
   "deep_link": "",
   "threshold": 0.86,

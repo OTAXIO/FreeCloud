@@ -133,6 +133,7 @@ Set-Location 'D:\others\TOOLS\wyy_code'
 - `emulator_start_timeout_seconds`：等待 ADB 设备和首张截图的最长时间。
 - `startup_navigation_timeout_seconds`：启动图标/跳过页导航的最长时间。
 - `close_emulator_on_limit`：识别到 `limit` 后是否关闭配置实例。
+- `close_emulator_on_exit`：程序正常结束、超时或被 Ctrl+C 停止时是否关闭模拟器。
 - `serial`：多设备时指定 `adb devices` 显示的序列号。
 - `package`：独立测试 APK 的真实包名；设为 `none` 时只演练。
 - `execution_enabled`：`start.py` 是否进入连续点击状态机；当前为 `true`。

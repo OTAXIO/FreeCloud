@@ -45,7 +45,9 @@ class StartupNavigationTests(unittest.TestCase):
         _sleep: Mock,
     ) -> None:
         recognizer_type.return_value.best_match.side_effect = [
+            None,
             match("launcher_icon", (120, 420)),
+            None,
             match("splash_skip", (1018, 80)),
             match("home", (540, 120)),
         ]
@@ -64,6 +66,11 @@ class StartupNavigationTests(unittest.TestCase):
             adb.calls,
             [("tap", 120, 420), ("tap", 1018, 80)],
         )
+        allowed = [call.kwargs["allowed_states"] for call in recognizer_type.return_value.best_match.call_args_list]
+        self.assertEqual(allowed[0], {"home"})
+        self.assertEqual(allowed[1], {"launcher_icon"})
+        self.assertEqual(allowed[2], {"home"})
+        self.assertEqual(allowed[3], {"launcher_icon", "splash_skip"})
 
 
 if __name__ == "__main__":
