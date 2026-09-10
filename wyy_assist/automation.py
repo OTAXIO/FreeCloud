@@ -228,7 +228,7 @@ def run_startup_navigation(
         # The home marker is cheap to match and ends startup immediately. Before
         # the app icon is clicked (or is known to be foreground), scan only the
         # launcher icon so launcher search widgets cannot become click targets.
-        match = recognizer.best_match(screen, allowed_states={"home"})
+        match = recognizer.best_match(screen, allowed_states={"limit", "home"})
         if match is None:
             if app_launch_requested:
                 # Restore the old hand-off behavior for scripts started while

@@ -16,7 +16,7 @@ from .monitor import run_monitor
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="ADB/OpenCV 移动端视觉状态机测试工具")
-    parser.add_argument("--config", default="config.json", help="配置文件路径")
+    parser.add_argument("--config", default=str(Path(__file__).resolve().parents[1] / "config.json"), help="配置文件路径")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     subparsers.add_parser("doctor", help="检查 Python、OpenCV、ADB 和模拟器连接")
@@ -66,6 +66,13 @@ def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
         settings = load_settings(args.config)
+        if args.command == "automate" and args.execute:
+            from .executor import ActionExecutor
+            from start import run
+
+            # Preserve the explicit input switch, then use the shared lifecycle.
+            ActionExecutor(settings, AdbClient(settings.adb_path, settings.serial), execute_requested=True).verify_input_enabled()
+            return run(settings.config_path, attach_only=True)
         adb = AdbClient(settings.adb_path, settings.serial)
         if args.command == "doctor":
             return _doctor(adb)

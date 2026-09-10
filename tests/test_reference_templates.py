@@ -15,6 +15,20 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class PackagedReferenceTests(unittest.TestCase):
+    def test_limit_text_outside_old_roi_wins_over_channel_heading(self):
+        settings = load_settings(ROOT / "config.json")
+        before = settings.to_dict()
+        recognizer = StateRecognizer(settings)
+        screen = np.zeros((1920, 1080, 3), dtype=np.uint8)
+        for item in recognizer.templates:
+            if item.state not in {"limit", "free_listen"}:
+                continue
+            x, y = (300, 1700) if item.state == "limit" else (550, 100)
+            h, w = item.image.shape
+            screen[y:y+h, x:x+w] = cv2.cvtColor(item.image, cv2.COLOR_GRAY2BGR)
+        self.assertEqual(recognizer.best_match(screen).state, "limit")
+        self.assertEqual(settings.to_dict(), before)
+
     def test_recovery_finds_relocated_exit_glyphs_without_changing_config(self) -> None:
         settings = load_settings(ROOT / "config.json")
         before = settings.to_dict()

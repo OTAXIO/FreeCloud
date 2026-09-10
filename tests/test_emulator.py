@@ -25,7 +25,7 @@ class FakeAdb:
     def ensure_device(self) -> str:
         if not self.connected:
             raise AdbError("not ready")
-        self.serial = self.connected[0]
+        self.serial = self.serial or self.connected[0]
         return self.serial
 
     def screenshot(self) -> np.ndarray:
@@ -76,6 +76,7 @@ class EmulatorTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             player = Path(directory) / "dnplayer.exe"
             player.touch()
+            (player.parent / "ldconsole.exe").touch()
             popen = Mock()
             controller = EmulatorController(
                 Settings(emulator_path=str(player)),
@@ -83,13 +84,14 @@ class EmulatorTests(unittest.TestCase):
             )
             self.assertTrue(controller.launch_if_needed(FakeAdb([])))
             popen.assert_called_once()
-            self.assertEqual(popen.call_args.args[0], [str(player)])
+            self.assertEqual(popen.call_args.args[0], [str(player.with_name("ldconsole.exe")), "launch", "--index", "0"])
             self.assertEqual(popen.call_args.kwargs["cwd"], str(player.parent))
 
     def test_connected_adb_still_requests_visible_emulator_window(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             player = Path(directory) / "dnplayer.exe"
             player.touch()
+            (player.parent / "ldconsole.exe").touch()
             popen = Mock()
             controller = EmulatorController(
                 Settings(emulator_path=str(player)),
@@ -97,15 +99,73 @@ class EmulatorTests(unittest.TestCase):
             )
             self.assertFalse(controller.launch_if_needed(FakeAdb(["emulator-5554"])))
             popen.assert_called_once()
-            self.assertEqual(popen.call_args.args[0], [str(player)])
+            self.assertEqual(popen.call_args.args[0], [str(player.with_name("ldconsole.exe")), "launch", "--index", "0"])
 
     def test_wait_for_frame_returns_only_after_screenshot_succeeds(self) -> None:
         adb = FakeAdb(["emulator-5554"])
         controller = EmulatorController(Settings(), sleeper=lambda _: None)
-        device, screen = controller.wait_for_frame(adb)
+        with patch.object(controller, "bind_device") as bind:
+            device, screen = controller.wait_for_frame(adb)
+        bind.assert_called_once_with(adb)
         self.assertEqual(device, "emulator-5554")
         self.assertEqual(screen.shape, (1920, 1080, 3))
         self.assertEqual(adb.frames, 1)
+
+    def test_launch_and_adb_both_use_configured_nonzero_instance(self):
+        with tempfile.TemporaryDirectory() as directory:
+            player = Path(directory) / "dnplayer.exe"
+            player.touch()
+            player.with_name("ldconsole.exe").touch()
+            popen = Mock()
+            controller = EmulatorController(Settings(emulator_path=str(player), emulator_index=2), popen=popen)
+            adb = FakeAdb(["emulator-5554", "emulator-5558"])
+            controller.launch_if_needed(adb)
+            self.assertEqual(popen.call_args.args[0][-2:], ["--index", "2"])
+            with patch.object(controller, "bind_device"):
+                device, _ = controller.wait_for_frame(adb)
+            self.assertEqual(device, "emulator-5558")
+
+    def test_mismatched_explicit_serial_never_launches_or_binds(self):
+        with tempfile.TemporaryDirectory() as directory:
+            player = Path(directory) / "dnplayer.exe"
+            player.touch()
+            popen = Mock()
+            controller = EmulatorController(Settings(emulator_path=str(player), emulator_index=0,
+                                                       serial="emulator-5556"), popen=popen)
+            adb = FakeAdb(["emulator-5556"])
+            adb.serial = "emulator-5556"
+            with self.assertRaises(EmulatorError):
+                controller.launch_if_needed(adb)
+            with self.assertRaises(EmulatorError):
+                controller.bind_device(adb)
+            popen.assert_not_called()
+
+    def test_bound_processes_prevent_false_success_when_console_loses_pids(self):
+        with tempfile.TemporaryDirectory() as directory:
+            player = Path(directory) / "dnplayer.exe"
+            player.with_name("ldconsole.exe").touch()
+            runner = Console()
+            now = [0.0]
+            owned = []
+            def factory(pid, root):
+                proc = Mock(pid=pid)
+                proc.alive.return_value = True
+                proc.terminate.side_effect = lambda: setattr(proc.alive, "return_value", False)
+                owned.append(proc)
+                return proc
+            controller = EmulatorController(Settings(emulator_path=str(player)), runner=runner,
+                process_factory=factory, monotonic=lambda: now[0],
+                sleeper=lambda seconds: now.__setitem__(0, now[0] + seconds))
+            adb = FakeAdb(["emulator-5554"])
+            adb.ensure_device()
+            controller.bind_device(adb)
+            runner.running = False  # Console now claims stopped, but Windows handles are alive.
+            controller.close()
+            self.assertGreaterEqual(now[0], 30)
+            self.assertEqual(len(owned), 2)
+            for proc in owned:
+                proc.terminate.assert_called_once()
+                proc.close.assert_called_once()
 
     def test_close_uses_ldplayer_console_and_configured_index(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -30,6 +30,17 @@ def match(state: str, center: tuple[int, int]) -> Match:
 
 
 class StartupNavigationTests(unittest.TestCase):
+    def test_startup_limit_is_checked_before_home_actions(self):
+        settings = Settings(package="com.example.test", execution_enabled=True, consecutive_hits=2)
+        adb = StartupAdb("mCurrentFocus=com.example.test/.Main")
+        with patch("wyy_assist.automation.StateRecognizer") as recognizer, \
+             patch("wyy_assist.automation.time.sleep"):
+            recognizer.return_value.best_match.return_value = match("limit", (500, 1700))
+            result = run_startup_navigation(settings, adb, execute_requested=True)
+        self.assertEqual(result.reason, "startup-limit")
+        self.assertEqual(adb.calls, [])
+        self.assertEqual(recognizer.return_value.best_match.call_count, 2)
+
     def test_main_state_machine_excludes_launcher_and_splash_states(self) -> None:
         settings = Settings(
             templates={
@@ -72,9 +83,9 @@ class StartupNavigationTests(unittest.TestCase):
             [("tap", 120, 420), ("tap", 1018, 80)],
         )
         allowed = [call.kwargs["allowed_states"] for call in recognizer_type.return_value.best_match.call_args_list]
-        self.assertEqual(allowed[0], {"home"})
+        self.assertEqual(allowed[0], {"limit", "home"})
         self.assertEqual(allowed[1], {"launcher_icon"})
-        self.assertEqual(allowed[2], {"home"})
+        self.assertEqual(allowed[2], {"limit", "home"})
         self.assertIn("splash_skip", allowed[3])
         self.assertIn("ready", allowed[3])
         self.assertNotIn("launcher_icon", allowed[3])

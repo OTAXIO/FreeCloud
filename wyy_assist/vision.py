@@ -73,7 +73,11 @@ class StateRecognizer:
         for item in self.templates:
             if allowed_states is not None and item.state not in allowed_states:
                 continue
-            x, y, width, height = normalized_roi_to_pixels(item.spec.search_roi, gray.shape)
+            # Completion text can move after page scroll/layout changes. Keep
+            # its text-only crop, scale and threshold, but don't miss it outside
+            # the old ROI. All actionable state search regions stay unchanged.
+            roi = None if item.state == "limit" else item.spec.search_roi
+            x, y, width, height = normalized_roi_to_pixels(roi, gray.shape)
             search = gray[y : y + height, x : x + width]
             scales = item.spec.scales or tuple(self.settings.template_scales)
             for scale in scales:

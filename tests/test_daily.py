@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+import os
+from unittest.mock import patch
 from datetime import date
 from pathlib import Path
 
@@ -47,3 +49,27 @@ class DailyRunTests(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, "YYYY-MM-DD"):
                 DailyRunState.load(path)
+
+    def test_utf8_bom_state_is_accepted(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "session.json"
+            path.write_text('{"last_limit_date": "2026-09-10"}', encoding="utf-8-sig")
+            self.assertEqual(DailyRunState.load(path).last_limit_date, date(2026, 9, 10))
+
+    def test_autorun_from_another_directory_uses_same_state_and_next_day_resets(self):
+        with tempfile.TemporaryDirectory() as directory:
+            settings = Settings(config_path=Path(directory) / "config.json")
+            mark_limit_reached(settings, date(2026, 9, 10))
+            previous = Path.cwd()
+            try:
+                os.chdir(Path(directory).parent)
+                self.assertTrue(limit_reached_today(settings, date(2026, 9, 10)))
+                self.assertFalse(limit_reached_today(settings, date(2026, 9, 11)))
+            finally:
+                os.chdir(previous)
+
+    def test_completion_is_flushed_before_atomic_replace(self):
+        with tempfile.TemporaryDirectory() as directory, patch("wyy_assist.daily.os.fsync") as sync:
+            settings = Settings(config_path=Path(directory) / "config.json")
+            mark_limit_reached(settings, date(2026, 9, 10))
+            sync.assert_called_once()

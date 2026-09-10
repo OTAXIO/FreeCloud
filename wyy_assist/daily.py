@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -15,7 +16,7 @@ class DailyRunState:
     @classmethod
     def load(cls, path: Path) -> "DailyRunState":
         try:
-            raw = json.loads(path.read_text(encoding="utf-8"))
+            raw = json.loads(path.read_text(encoding="utf-8-sig"))
         except FileNotFoundError:
             return cls()
         except json.JSONDecodeError as exc:
@@ -46,10 +47,10 @@ class DailyRunState:
                 else None
             )
         }
-        temporary.write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
+        with temporary.open("w", encoding="utf-8") as handle:
+            handle.write(json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
         temporary.replace(path)
 
 
@@ -62,7 +63,9 @@ def state_path(settings: Settings) -> Path:
 
 def limit_reached_today(settings: Settings, today: date | None = None) -> bool:
     current_date = today or date.today()
-    state = DailyRunState.load(state_path(settings))
+    path = state_path(settings)
+    state = DailyRunState.load(path)
+    print(f"[每日] 检查日期={current_date.isoformat()}，最后完成={state.last_limit_date or '无记录'}，状态文件={path}")
     return state.last_limit_date == current_date
 
 

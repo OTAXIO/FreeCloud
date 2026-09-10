@@ -2,6 +2,7 @@ $ErrorActionPreference = "Stop"
 
 $projectDirectory = Split-Path -Parent $PSScriptRoot
 $startScript = Join-Path $projectDirectory "start.py"
+$configPath = Join-Path $projectDirectory "config.json"
 $preferredPython = "D:\Basement\Miniconda3\envs\jiaoworun\python.exe"
 try {
     if (Test-Path -LiteralPath $preferredPython -PathType Leaf) {
@@ -15,7 +16,7 @@ try {
         # Python supervises its worker and writes UTF-8 logs. PS 5.1 redirection
         # previously turned native stderr into a terminating NativeCommandError.
         $ErrorActionPreference = "Continue"
-        & $python -u $startScript --no-pause --autorun
+        & $python -u $startScript --config $configPath --no-pause --autorun
         $exitCode = $LASTEXITCODE
     }
     finally { Pop-Location }

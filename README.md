@@ -35,16 +35,21 @@ Set-Location 'D:\others\TOOLS\wyy_code'
 恢复。超时、识别失败、手动按 Ctrl+C 或其他非 `limit` 结果不会写入完成日期，因此不会
 误锁当天后续运行。`session.json` 是本机运行状态，已被 Git 忽略。
 
-双击 `安装开机自启.bat` 可为当前 Windows 用户安装计划任务
-`WyyVisualAssistDaily`。任务在以下两种情况下运行：
+双击 `安装开机自启.bat` 会更新当前用户的自启配置。Windows 登录启动参考本机
+`D:\dmaid\src\function\startup.py`：使用 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`
+下独立的 `WyyVisualAssistDaily` 项，命令和配置路径均为绝对路径，不修改 DigitMaid 的启动项。
+流程在以下两种情况下运行：
 
 1. 当前用户登录 Windows 时，用于每次开机登录后自动执行。
-2. 每日 00:05；如果当时关机或任务未能运行，Windows 会在之后可用时补跑。
+2. 通过保留的 `WyyVisualAssistDaily` 计划任务每日 00:05 检查；错过后尽快补跑。
+   该任务不再包含登录触发器，避免与 Run 项重复触发。
 
 两个触发器共用同一套每日判定，因此同一天不会在检测到 `limit` 后重复执行。开机自动
-运行时，命令窗口以最小化状态启动；每次尝试的 UTF-8 日志保存在 `logs/run-日期时间.log`。
+运行时，命令窗口以最小化状态启动；启动日期判断（包括直接跳过）保存在
+`logs/autostart-日期时间.log`，包含当前日期、最后完成日期和状态文件完整路径；
+每次尝试的 UTF-8 日志保存在 `logs/run-日期时间.log`。
 之前的 `logs/autorun.log` 保留作历史记录。如不再需要，双击 `卸载开机自启.bat` 即可删除
-计划任务。脚本更新后重新运行安装脚本，会更新同一个任务。
+本项目的 Run 项和计划任务。脚本更新后重新运行安装脚本，会更新相同的自启配置。
 
 程序未达到 `limit` 就退出、崩溃或被 Ctrl+C 中断时，会弹出置顶窗口：
 
@@ -198,6 +203,14 @@ Set-Location 'D:\others\TOOLS\wyy_code'
 ## 测试
 
 ### 闪退恢复与退出核验
+
+- `start.py` 和 `python -m wyy_assist automate --execute` 共用每日记录及完成后的关闭流程；
+  命令行仍只接管已连接的模拟器，不额外打开应用。没有检测到 `limit` 的运行不会被伪记为完成。
+- `limit` 仍仅匹配结束文字、使用原阈值及连续确认次数，但搜索整个应用截图，避免页面移动后漏检。
+  启动检查同时优先检查 `limit` 和首页标志，避免已完成页面先触发导航。
+- 启动、ADB 连接和退出固定到同一个 `emulator_index`；不再随意连接其他在线设备。
+  在打开应用前记录 Windows 窗口和虚拟机进程句柄，退出时保留核验这些句柄，
+  防止控制台临时丢失 PID 后误报退出。关闭使用雷电 `quit --index`，不是 App 返回键或 `killapp`。
 
 - 任务未完成、前台回到 Android 桌面时，恢复流程会按 `package` 解析应用启动入口并重新打开；
   同一轮恢复最多重开 3 次，总时限仍为 30 秒，超时进入原来的“继续 / 放弃”提示。
