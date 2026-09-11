@@ -11,6 +11,7 @@ from wyy_assist.model import Settings
 
 class StartTests(unittest.TestCase):
     def setUp(self):
+        self.entry = self.enterContext(patch("start.run_entry_navigation", return_value=AutomationResult("ready", 0)))
         self.pending = self.enterContext(patch("start.shutdown_pending", return_value=False))
         self.mark_pending = self.enterContext(patch("start.mark_shutdown_pending"))
         self.clear_pending = self.enterContext(patch("start.clear_shutdown_pending"))
@@ -21,6 +22,23 @@ class StartTests(unittest.TestCase):
 
     def test_default_config_is_used(self) -> None:
         self.assertEqual(start.choose_config(), start.DEFAULT_CONFIG)
+
+    def test_failed_app_restart_never_enters_main_loop_or_marks_completion(self):
+        from wyy_assist.recovery import RecoveryFailed
+        settings = Settings(package="com.example.test", execution_enabled=True)
+        with patch("start.load_settings", return_value=settings), \
+             patch("start.limit_reached_today", return_value=False), \
+             patch("start.AdbClient"), patch("start.EmulatorController") as controller, \
+             patch("start.run_startup_navigation", side_effect=RecoveryFailed("应用重启后再次失败")), \
+             patch("start.run_live") as live, patch("start.mark_limit_reached") as mark:
+            controller.return_value.wait_for_frame.return_value = ("emulator-5554", Mock())
+            with self.assertRaisesRegex(RecoveryFailed, "再次失败"):
+                start.run(start.DEFAULT_CONFIG)
+            live.assert_not_called()
+            mark.assert_not_called()
+            self.mark_pending.assert_not_called()
+            controller.return_value.close.assert_not_called()
+            controller.return_value.release_handles.assert_called_once()
 
     def test_none_package_is_not_configured(self) -> None:
         self.assertFalse(start.package_is_configured("none"))
@@ -102,6 +120,7 @@ class StartTests(unittest.TestCase):
             "emulator-5554",
             Mock(),
         )
+        run_startup_navigation.return_value = AutomationResult("startup-my_tab", 1)
         run_live.return_value = AutomationResult("limit", 8)
 
         self.assertEqual(start.run(start.DEFAULT_CONFIG), 0)
@@ -109,11 +128,13 @@ class StartTests(unittest.TestCase):
             load_settings.return_value,
             adb_client.return_value,
             execute_requested=True,
+            navigation_states=frozenset(start.navigation_steps()),
         )
         run_live.assert_called_once_with(
             load_settings.return_value,
             adb_client.return_value,
             execute_requested=True,
+            navigation_states=frozenset(start.navigation_steps()),
         )
         preview_once.assert_not_called()
         emulator_controller.return_value.launch_if_needed.assert_called_once_with(
@@ -148,6 +169,7 @@ class StartTests(unittest.TestCase):
             "emulator-5554",
             Mock(),
         )
+        _run_startup_navigation.return_value = AutomationResult("startup-my_tab", 1)
         run_live.return_value = AutomationResult("limit", 8)
         mark_limit_reached.return_value = start.PROJECT_DIR / "session.json"
 

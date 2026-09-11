@@ -1,10 +1,33 @@
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, call
 
 from wyy_assist.adb import AdbClient, AdbError, foreground_package
 
 
 class AppTests(unittest.TestCase):
+    def test_restart_stops_only_target_package_before_resolved_launch(self):
+        adb = AdbClient("adb.exe")
+        adb.run = Mock(side_effect=["", "com.example.app/.Main", "Status: ok"])
+        adb.restart_app("com.example.app")
+        self.assertEqual(adb.run.call_args_list[0],
+                         call("shell", "am", "force-stop", "com.example.app", timeout=5.0))
+        self.assertEqual(adb.run.call_args_list[-1],
+                         call("shell", "am", "start", "-W", "-n", "com.example.app/.Main", timeout=5.0))
+
+    def test_restart_rejects_invalid_package_before_stopping_any_app(self):
+        adb = AdbClient("adb.exe")
+        adb.run = Mock()
+        with self.assertRaises(AdbError):
+            adb.restart_app("com.example.app; reboot")
+        adb.run.assert_not_called()
+
+    def test_failed_force_stop_does_not_launch(self):
+        adb = AdbClient("adb.exe")
+        adb.run = Mock(side_effect=AdbError("stop failed"))
+        with self.assertRaises(AdbError):
+            adb.restart_app("com.example.app")
+        adb.run.assert_called_once()
+
     def test_current_focus_wins_over_stale_focused_app(self):
         self.assertEqual(foreground_package("mCurrentFocus=Window{0 u0 com.android.launcher3/.Launcher}\n"
                                            "mFocusedApp=Activity{0 com.example.app/.Main}"), "com.android.launcher3")

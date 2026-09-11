@@ -12,7 +12,13 @@
   "package": "com.netease.cloudmusic",
   "deep_link": "",
   "threshold": 0.86,
-  "template_scales": [0.9, 0.95, 1.0, 1.05, 1.1],
+  "template_scales": [
+    0.9,
+    0.95,
+    1.0,
+    1.05,
+    1.1
+  ],
   "state_priority": [
     "limit",
     "splash_skip",
@@ -21,12 +27,13 @@
     "ad_close",
     "ad_interaction",
     "ad",
+    "free_listen_vip",
     "ready",
-    "free_listen_page",
     "free_listen",
     "landing",
     "home",
-    "free_listen_icon",
+    "my_tab",
+    "menu_button",
     "launcher_icon"
   ],
   "poll_interval_seconds": 0.7,
@@ -37,103 +44,297 @@
   "unknown_timeout_seconds": 30.0,
   "execution_enabled": true,
   "ad_post_click_wait_seconds": 10.0,
-  "top_menu_swipe": [0.85, 0.08, 0.25, 0.08, 450],
-  "ad_interaction_point": [0.5, 0.5],
-  "download_cancel_point": [0.59, 0.57],
+  "top_menu_swipe": [
+    0.85,
+    0.08,
+    0.25,
+    0.08,
+    450
+  ],
+  "ad_interaction_point": [
+    0.5,
+    0.5
+  ],
+  "download_cancel_point": [
+    0.59,
+    0.57
+  ],
   "templates": {
+    "menu_button": [
+      {
+        "path": "templates/menu_button_reference.png",
+        "threshold": 0.9,
+        "scales": [
+          0.85,
+          0.9,
+          0.95,
+          1.0,
+          1.05,
+          1.1,
+          1.15,
+          1.2,
+          1.25,
+          1.3,
+          1.315,
+          1.35,
+          1.4,
+          1.45,
+          1.5,
+          1.6
+        ]
+      },
+      {
+        "path": "templates/my_menu_reference.png",
+        "search_roi": [
+          0.65,
+          0.02,
+          0.35,
+          0.16
+        ],
+        "threshold": 0.88,
+        "scales": [
+          0.7,
+          0.75,
+          0.8,
+          0.85,
+          0.9,
+          0.95,
+          1.0,
+          1.05,
+          1.1,
+          1.2,
+          1.3,
+          1.4
+        ]
+      }
+    ],
+    "free_listen_vip": [
+      {
+        "path": "templates/free_listen_vip_reference.png",
+        "threshold": 0.87,
+        "scales": [
+          0.8,
+          0.85,
+          0.9,
+          0.95,
+          1.0,
+          1.05,
+          1.1,
+          1.15,
+          1.2,
+          1.25,
+          1.3,
+          1.35,
+          1.4,
+          1.45,
+          1.5,
+          1.55,
+          1.6
+        ]
+      }
+    ],
     "launcher_icon": [
       {
         "path": "templates/launcher_icon_reference.png",
-        "search_roi": [0.04, 0.14, 0.92, 0.68],
+        "search_roi": [
+          0.04,
+          0.14,
+          0.92,
+          0.68
+        ],
         "threshold": 0.86,
-        "scales": [0.75, 0.9, 1.0, 1.1, 1.2, 1.25, 1.3, 1.35, 1.4, 1.5]
+        "scales": [
+          0.75,
+          0.9,
+          1.0,
+          1.1,
+          1.2,
+          1.25,
+          1.3,
+          1.35,
+          1.4,
+          1.5
+        ]
       }
     ],
     "splash_skip": [
       {
         "path": "templates/splash_skip_reference.png",
-        "search_roi": [0.65, 0.0, 0.35, 0.25],
+        "search_roi": [
+          0.65,
+          0.0,
+          0.35,
+          0.25
+        ],
         "threshold": 0.82
       }
     ],
     "home": [
       {
         "path": "templates/home_reference.png",
-        "search_roi": [0.2, 0.03, 0.35, 0.12]
+        "search_roi": [
+          0.2,
+          0.03,
+          0.35,
+          0.12
+        ]
       }
     ],
     "free_listen": [
       {
         "path": "templates/free_listen_reference.png",
-        "search_roi": [0.4, 0.03, 0.4, 0.12]
-      }
-    ],
-    "free_listen_icon": [
-      {
-        "path": "templates/free_listen_icon_reference.png",
-        "search_roi": [0.68, 0.03, 0.2, 0.14],
-        "threshold": 0.9,
-        "scales": [1.0, 1.15, 1.2, 1.25, 1.3, 1.35, 1.4]
-      }
-    ],
-    "free_listen_page": [
-      {
-        "path": "templates/free_listen_page_reference.png",
-        "search_roi": [0.0, 0.02, 0.8, 0.35],
-        "threshold": 0.84,
-        "template_roi": [0.04, 0.035, 0.44, 0.07]
+        "search_roi": [
+          0.4,
+          0.03,
+          0.4,
+          0.12
+        ]
       }
     ],
     "ready": [
       {
         "path": "templates/ready_reference.png",
-        "search_roi": [0.2, 0.48, 0.6, 0.25]
+        "search_roi": [
+          0.2,
+          0.48,
+          0.6,
+          0.25
+        ]
       },
       {
         "path": "templates/ready_scrolled_reference.png",
-        "search_roi": [0.15, 0.45, 0.7, 0.52],
+        "search_roi": [
+          0.15,
+          0.45,
+          0.7,
+          0.52
+        ],
         "threshold": 0.84,
-        "template_roi": [0.33, 0.86, 0.36, 0.09]
+        "template_roi": [
+          0.33,
+          0.86,
+          0.36,
+          0.09
+        ]
       }
     ],
     "ad_interaction": [
       {
         "path": "templates/ad_interaction_reference.png",
-        "search_roi": [0.0, 0.02, 0.65, 0.18]
+        "search_roi": [
+          0.0,
+          0.02,
+          0.65,
+          0.18
+        ]
       }
     ],
     "download_prompt": [
       {
         "path": "templates/download_prompt_reference.png",
-        "search_roi": [0.02, 0.38, 0.96, 0.3],
+        "search_roi": [
+          0.02,
+          0.38,
+          0.96,
+          0.3
+        ],
         "threshold": 0.78,
-        "template_roi": [0.53, 0.6, 0.19, 0.36]
+        "template_roi": [
+          0.53,
+          0.6,
+          0.19,
+          0.36
+        ]
       }
     ],
     "landing": [
       {
         "path": "templates/landing_reference.png",
-        "search_roi": [0.0, 0.0, 0.8, 0.18],
-        "threshold": 0.78,
-        "template_roi": [0.02, 0.1, 0.22, 0.8]
+        "search_roi": [
+          0.0,
+          0.02,
+          0.15,
+          0.1
+        ],
+        "threshold": 0.88
       }
     ],
     "ad_close": [
       {
         "path": "templates/ad_interaction_close_reference.png",
-        "search_roi": [0.78, 0.02, 0.22, 0.2]
+        "search_roi": [
+          0.78,
+          0.02,
+          0.22,
+          0.2
+        ]
       },
       {
         "path": "templates/ad_close_reference.png",
-        "search_roi": [0.3, 0.62, 0.4, 0.28]
+        "search_roi": [
+          0.3,
+          0.62,
+          0.4,
+          0.28
+        ]
       }
     ],
     "limit": [
       {
         "path": "templates/limit_reference.png",
-        "search_roi": [0.1, 0.35, 0.8, 0.45],
+        "search_roi": [
+          0.1,
+          0.35,
+          0.8,
+          0.45
+        ],
         "threshold": 0.88,
-        "template_roi": [0.31, 0.78, 0.38, 0.11]
+        "template_roi": [
+          0.31,
+          0.78,
+          0.38,
+          0.11
+        ],
+        "scales": [
+          0.9,
+          0.95,
+          1.0,
+          1.05,
+          1.1,
+          1.2,
+          1.25,
+          1.3,
+          1.315,
+          1.35
+        ]
+      }
+    ],
+    "my_tab": [
+      {
+        "path": "templates/my_tab_reference.png",
+        "search_roi": [
+          0.5,
+          0.85,
+          0.5,
+          0.15
+        ],
+        "threshold": 0.88,
+        "scales": [
+          0.7,
+          0.75,
+          0.76,
+          0.8,
+          0.85,
+          0.9,
+          0.95,
+          1.0,
+          1.05,
+          1.1,
+          1.2,
+          1.3,
+          1.4,
+          1.5
+        ]
       }
     ]
   }

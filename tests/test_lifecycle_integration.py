@@ -1,4 +1,5 @@
-from contextlib import nullcontext
+from contextlib import nullcontext, redirect_stdout
+from io import StringIO
 from datetime import date
 from pathlib import Path
 import tempfile
@@ -13,7 +14,10 @@ from wyy_assist.shutdown import shutdown_pending
 
 
 class LifecycleIntegrationTests(unittest.TestCase):
-    def test_limit_persists_then_autorun_skips_before_adb_and_logs_decision(self):
+    def setUp(self):
+        self.enterContext(patch("start.run_entry_navigation", return_value=AutomationResult("ready", 0)))
+
+    def test_limit_persists_then_manual_run_skips_before_adb(self):
         with tempfile.TemporaryDirectory() as directory:
             settings = Settings(config_path=Path(directory) / "config.json",
                                 package="com.example.test", execution_enabled=True, daily_run_enabled=True)
@@ -28,20 +32,18 @@ class LifecycleIntegrationTests(unittest.TestCase):
                 emulator.return_value.close.assert_called_once()
                 adb.reset_mock()
                 emulator.reset_mock()
-                with patch("wyy_assist.supervisor.load_settings", return_value=settings), \
+                output = StringIO()
+                with redirect_stdout(output), \
+                     patch("wyy_assist.supervisor.load_settings", return_value=settings), \
                      patch("wyy_assist.supervisor.single_instance", return_value=nullcontext(True)), \
-                     patch("wyy_assist.supervisor.boot_id") as boot, \
                      patch("wyy_assist.supervisor.launch_worker") as worker:
-                    self.assertEqual(start.main(["--autorun", "--config", str(settings.config_path)]), 0)
+                    self.assertEqual(start.main(["--no-pause", "--config", str(settings.config_path)]), 0)
                     worker.assert_not_called()
-                    boot.assert_not_called()
                 adb.assert_not_called()
                 emulator.assert_not_called()
                 live.assert_not_called()
-            logs = list((Path(directory) / "logs").glob("autostart-*.log"))
-            self.assertEqual(len(logs), 1)
-            self.assertIn("跳过运行", logs[0].read_text(encoding="utf-8"))
-            self.assertIn(str(state_path(settings)), logs[0].read_text(encoding="utf-8"))
+            self.assertIn("跳过运行", output.getvalue())
+            self.assertIn(str(state_path(settings)), output.getvalue())
 
     def test_attached_cli_completion_closes_emulator_and_next_run_skips(self):
         with tempfile.TemporaryDirectory() as directory:

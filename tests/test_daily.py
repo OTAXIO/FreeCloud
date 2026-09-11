@@ -56,7 +56,7 @@ class DailyRunTests(unittest.TestCase):
             path.write_text('{"last_limit_date": "2026-09-10"}', encoding="utf-8-sig")
             self.assertEqual(DailyRunState.load(path).last_limit_date, date(2026, 9, 10))
 
-    def test_autorun_from_another_directory_uses_same_state_and_next_day_resets(self):
+    def test_run_from_another_directory_uses_same_state_and_next_day_resets(self):
         with tempfile.TemporaryDirectory() as directory:
             settings = Settings(config_path=Path(directory) / "config.json")
             mark_limit_reached(settings, date(2026, 9, 10))

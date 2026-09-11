@@ -102,6 +102,10 @@ class StateRecognizer:
                 if previous is None or candidate.score > previous.score:
                     matches[item.state] = candidate
 
+        # Completion is terminal in every workflow stage. Even a reordered
+        # config or a visible ready/exit button must not hide its text marker.
+        if "limit" in matches:
+            return matches["limit"]
         for state in self.settings.state_priority:
             if state in matches:
                 return matches[state]

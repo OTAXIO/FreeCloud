@@ -161,19 +161,19 @@ class VisionTests(unittest.TestCase):
             settings = Settings(
                 threshold=0.9,
                 template_scales=[1.0],
-                state_priority=["home", "free_listen_icon"],
+                state_priority=["home", "free_listen_vip"],
                 templates={
                     "home": [TemplateSpec("home.png")],
-                    "free_listen_icon": [TemplateSpec("fallback.png")],
+                    "free_listen_vip": [TemplateSpec("fallback.png")],
                 },
                 config_path=root / "config.json",
             )
             recognizer = StateRecognizer(settings)
             self.assertEqual(recognizer.best_match(screen).state, "home")
-            match = recognizer.best_match(screen, allowed_states={"free_listen_icon"})
+            match = recognizer.best_match(screen, allowed_states={"free_listen_vip"})
             self.assertIsNotNone(match)
             assert match is not None
-            self.assertEqual(match.state, "free_listen_icon")
+            self.assertEqual(match.state, "free_listen_vip")
 
 
 if __name__ == "__main__":

@@ -175,3 +175,10 @@ class AdbClient:
         result = str(self.run("shell", "am", "start", "-W", "-n", component, timeout=5.0))
         if "Error:" in result or "Exception" in result:
             raise AdbError(f"应用重新启动失败：{result.strip()}")
+
+    def restart_app(self, package: str) -> None:
+        """Stop the configured app process before opening its launcher activity."""
+        if not re.fullmatch(r"[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)+", package):
+            raise AdbError("无效的目标包名")
+        self.run("shell", "am", "force-stop", package, timeout=5.0)
+        self.launch_app(package)

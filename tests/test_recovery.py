@@ -53,6 +53,7 @@ class Device:
 class RecoveryTests(unittest.TestCase):
     def setUp(self):
         self.clock = Clock()
+        self.enterContext(patch("wyy_assist.timing.random.randint", return_value=0))
         self.settings = Settings(package="com.example.school.mockads", execution_enabled=True,
                                  poll_interval_seconds=1, consecutive_hits=2)
         self.device = Device(self.clock)
@@ -71,8 +72,19 @@ class RecoveryTests(unittest.TestCase):
         self.assertEqual(self.device.actions, [("tap", 0.0, (90, 40))])
         self.assertEqual(self.clock.now, 2.0)
 
+    def test_normal_page_with_back_arrow_resumes_without_back(self):
+        exits = Mock()
+        exits.best_match.return_value = found("landing")
+        recognizer = Mock()
+        recognizer.best_match.return_value = found("ready")
+        with patch("wyy_assist.recovery.recovery_recognizer", return_value=exits):
+            result = recover_page(self.settings, self.device, recognizer, self.executor, cause="unknown")
+        self.assertEqual(result.state, "ready")
+        self.assertFalse(self.device.actions)
+        self.assertEqual(self.clock.now, 1)
+
     def test_unknown_uses_back_and_fails_at_30_seconds_even_when_exits_are_found(self):
-        for target in (None, found("ad_close")):
+        for target in (None, found("ad_close"), found("landing")):
             with self.subTest(target=target):
                 self.clock.now = 0
                 self.device.actions.clear()
@@ -114,7 +126,7 @@ class RecoveryTests(unittest.TestCase):
         def launch(package):
             self.assertEqual(package, self.settings.package)
             self.device.foreground_window.return_value = package + "/.Main"
-        self.device.launch_app = Mock(side_effect=launch)
+        self.device.restart_app = Mock(side_effect=launch)
         recognizer = Mock()
         recognizer.best_match.side_effect = lambda screen, allowed_states: found("ready") if "ready" in allowed_states else None
         exits = Mock()
@@ -123,22 +135,22 @@ class RecoveryTests(unittest.TestCase):
             result = recover_page(self.settings, self.device, recognizer, self.executor,
                                   cause="app crashed", blocked_state="ready")
         self.assertEqual(result.state, "ready")
-        self.device.launch_app.assert_called_once()
+        self.device.restart_app.assert_called_once()
         self.assertFalse(self.device.actions)
         self.assertLess(self.clock.now, 30)
 
-    def test_repeated_crash_relaunches_at_most_three_times_without_back_on_desktop(self):
+    def test_repeated_crash_restarts_once_then_aborts_without_back_on_desktop(self):
         self.device.foreground_window = lambda: "mCurrentFocus=com.android.launcher3/.Launcher\nmFocusedApp=com.example.school.mockads/.Main"
-        self.device.launch_app = Mock()
+        self.device.restart_app = Mock()
         with self.assertRaises(RecoveryFailed):
             recover_page(self.settings, self.device, Mock(), self.executor, cause="crash")
-        self.assertEqual(self.device.launch_app.call_count, 3)
-        self.assertEqual(self.clock.now, 30)
+        self.device.restart_app.assert_called_once_with(self.settings.package)
+        self.assertEqual(self.clock.now, 5)
         self.assertFalse(self.device.actions)
 
     def test_splash_skip_is_enabled_only_after_reopening(self):
         self.device.foreground_window = Mock(return_value="com.android.launcher3/.Launcher")
-        self.device.launch_app = Mock(side_effect=lambda package: setattr(
+        self.device.restart_app = Mock(side_effect=lambda package: setattr(
             self.device.foreground_window, "return_value", package + "/.Splash"))
         recognizer = Mock()
         recognizer.best_match.side_effect = lambda screen, allowed_states: (

@@ -15,6 +15,39 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class PackagedReferenceTests(unittest.TestCase):
+    def test_live_landing_back_does_not_depend_on_title(self):
+        settings = load_settings(ROOT / "config.json")
+        header = cv2.imdecode(np.fromfile(ROOT / "tests/fixtures/landing_header.png", dtype=np.uint8),
+                              cv2.IMREAD_COLOR)
+        for recognizer in (StateRecognizer(settings), recovery_recognizer(settings)):
+            for title in ("original", "changed", "absent"):
+                with self.subTest(recovery=recognizer.settings is not settings, title=title):
+                    screen = np.full((1920, 1080, 3), 255, dtype=np.uint8)
+                    screen[:header.shape[0]] = header
+                    if title != "original":
+                        screen[80:220, 160:900] = 255
+                    if title == "changed":
+                        cv2.putText(screen, "Different page", (170, 165),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 0, 0), 3)
+                    result = recognizer.best_match(screen, allowed_states={"landing"})
+                    self.assertIsNotNone(result)
+                    self.assertEqual(result.center, (84, 150))
+                    # A title alone must never authorize Back.
+                    screen[80:220, :150] = 255
+                    self.assertIsNone(recognizer.best_match(screen, allowed_states={"landing"}))
+
+    def test_back_arrow_outside_upper_left_is_ignored_in_normal_and_recovery_modes(self):
+        settings = load_settings(ROOT / "config.json")
+        template = cv2.imdecode(np.fromfile(ROOT / "templates/landing_reference.png", dtype=np.uint8),
+                                cv2.IMREAD_COLOR)
+        height, width = template.shape[:2]
+        for recognizer in (StateRecognizer(settings), recovery_recognizer(settings)):
+            for x, y in ((850, 112), (44, 500), (450, 900)):
+                with self.subTest(x=x, y=y):
+                    screen = np.full((1920, 1080, 3), 255, dtype=np.uint8)
+                    screen[y:y+height, x:x+width] = template
+                    self.assertIsNone(recognizer.best_match(screen, allowed_states={"landing"}))
+
     def test_limit_text_outside_old_roi_wins_over_channel_heading(self):
         settings = load_settings(ROOT / "config.json")
         before = settings.to_dict()
@@ -40,6 +73,9 @@ class PackagedReferenceTests(unittest.TestCase):
                 # Deliberately outside each template's normal screen region.
                 screen[600:600 + height, 320:320 + width] = cv2.cvtColor(item.image, cv2.COLOR_GRAY2BGR)
                 matched = recognizer.best_match(screen, allowed_states={item.state})
+                if item.state == "landing":
+                    self.assertIsNone(matched)
+                    continue
                 self.assertIsNotNone(matched)
                 self.assertEqual(matched.center, (320 + width // 2, 600 + height // 2))
         self.assertEqual(before, settings.to_dict())
@@ -89,12 +125,10 @@ class PackagedReferenceTests(unittest.TestCase):
             "splash_skip": (950, 80),
             "home": (300, 100),
             "free_listen": (550, 100),
-            "free_listen_icon": (800, 100),
-            "free_listen_page": (0, 0),
             "ready": (345, 1122),
             "ad_interaction": (42, 118),
             "download_prompt": (70, 900),
-            "landing": (50, 20),
+            "landing": (44, 112),
             "ad_close": (470, 1415),
             "limit": (150, 800),
         }
@@ -107,7 +141,7 @@ class PackagedReferenceTests(unittest.TestCase):
                 screen = np.zeros((1920, 1080, 3), dtype=np.uint8)
                 height, width = template.shape[:2]
                 screen[y : y + height, x : x + width] = template
-                match = recognizer.best_match(screen)
+                match = recognizer.best_match(screen, allowed_states=set(placements))
                 self.assertIsNotNone(match)
                 assert match is not None
                 self.assertEqual(match.state, state)

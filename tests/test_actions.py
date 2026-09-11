@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from wyy_assist.actions import ActionKind, ActionPlanner
+from wyy_assist.entry_navigation import EntryActionPlanner
 from wyy_assist.automation import AdCyclePhase, AdCycleTimer, StateRetryPolicy, UnknownCenterFallback
 from wyy_assist.executor import ActionExecutor, ExecutionBlocked
 from wyy_assist.model import Match, Settings
@@ -32,6 +34,9 @@ def match(state: str, center: tuple[int, int] = (540, 960)) -> Match:
 
 
 class ActionTests(unittest.TestCase):
+    def setUp(self):
+        self.enterContext(patch("wyy_assist.timing.random.randint", return_value=0))
+
     def test_clicks_are_disabled_by_default(self) -> None:
         settings = Settings(package="com.example.school.mockads")
         executor = ActionExecutor(settings, FakeAdb(), execute_requested=True)
@@ -77,7 +82,7 @@ class ActionTests(unittest.TestCase):
         self.assertEqual(adb.calls, [("tap", 120, 420)])
 
     def test_home_repeats_recommend_tap_before_channel_swipe(self) -> None:
-        actions = ActionPlanner(Settings()).plan(match("home", (420, 120)), (1080, 1920))
+        actions = EntryActionPlanner(Settings(), ("home", "free_listen")).plan(match("home", (420, 120)), (1080, 1920))
         self.assertEqual(
             [action.kind for action in actions],
             [
@@ -93,27 +98,6 @@ class ActionTests(unittest.TestCase):
             [action.point for action in actions if action.kind is ActionKind.TAP],
             [(420, 120), (420, 120), (420, 120)],
         )
-
-    def test_free_listen_icon_fallback_clicks_match_center(self) -> None:
-        actions = ActionPlanner(Settings()).plan(
-            match("free_listen_icon", (160, 760)),
-            (1080, 1920),
-        )
-        self.assertEqual(
-            [action.kind for action in actions],
-            [ActionKind.TAP, ActionKind.WAIT, ActionKind.SWIPE],
-        )
-        self.assertEqual(actions[0].point, (160, 760))
-        self.assertEqual(actions[1].seconds, 2.0)
-        self.assertEqual(actions[2].swipe, (540, 1574, 540, 538, 550))
-
-    def test_free_listen_page_scrolls_toward_lower_puzzle_section(self) -> None:
-        actions = ActionPlanner(Settings()).plan(
-            match("free_listen_page", (200, 160)),
-            (1080, 1920),
-        )
-        self.assertEqual(actions[0].kind, ActionKind.SWIPE)
-        self.assertEqual(actions[0].swipe, (540, 1574, 540, 538, 550))
 
     def test_foreground_must_match_configured_test_package(self) -> None:
         settings = Settings(package="com.example.school.mockads", execution_enabled=True)
@@ -181,11 +165,11 @@ class ActionTests(unittest.TestCase):
         self.assertEqual(actions[0].kind, ActionKind.TAP)
         self.assertEqual(actions[0].point, (638, 1091))
 
-    def test_landing_uses_android_back_instead_of_title_template_center(self) -> None:
-        actions = ActionPlanner(Settings()).plan(match("landing", (70, 70)), (1080, 1920))
+    def test_landing_clicks_recognized_upper_left_back_arrow(self) -> None:
+        actions = ActionPlanner(Settings()).plan(match("landing", (84, 150)), (1080, 1920))
         self.assertEqual(len(actions), 1)
-        self.assertEqual(actions[0].kind, ActionKind.BACK)
-        self.assertIsNone(actions[0].point)
+        self.assertEqual(actions[0].kind, ActionKind.TAP)
+        self.assertEqual(actions[0].point, (84, 150))
 
     def test_limit_state_stops_without_any_click(self) -> None:
         actions = ActionPlanner(Settings()).plan(match("limit", (540, 960)), (1080, 1920))

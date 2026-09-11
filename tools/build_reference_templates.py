@@ -87,9 +87,8 @@ def build(source: Path, output: Path, debug: Path | None = None) -> None:
     prompt = cv2.resize(prompt, None, fx=1080 / download.shape[1], fy=1080 / download.shape[1], interpolation=cv2.INTER_CUBIC)
     write_image(output / "download_prompt_reference.png", prompt)
 
-    header = read_image(source / "屏幕截图 2026-09-08 184012.png")
-    header = cv2.resize(header, None, fx=1080 / 849, fy=1080 / 849, interpolation=cv2.INTER_CUBIC)
-    write_image(output / "landing_reference.png", header)
+    # landing_reference.png is calibrated from a fresh ADB capture. Keep it;
+    # never replace its Back-only crop with the historical full title bar.
 
     if debug is not None:
         for state, screen in screens.items():

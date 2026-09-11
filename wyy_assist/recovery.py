@@ -1,18 +1,20 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Collection
 from dataclasses import replace
 
 from .actions import Action, ActionKind
 from .adb import AdbClient, AdbError, foreground_package
 from .executor import ActionExecutor, ExecutionBlocked
 from .model import Match, Settings
+from .navigation import LOGIC_1_STATES, NAVIGATION_STATES, filter_navigation_states
 from .tracker import StableStateTracker
 from .vision import StateRecognizer
 
 
 RESUME_STATES = frozenset({
-    "home", "free_listen", "free_listen_icon", "free_listen_page", "ready", "limit",
+    "ready", "limit", *NAVIGATION_STATES,
 })
 RECOVERY_SECONDS = 30.0
 
@@ -22,10 +24,9 @@ class RecoveryFailed(RuntimeError):
 
 
 def recovery_recognizer(settings: Settings) -> StateRecognizer:
-    # Reuse the actual close/cancel/back glyphs, but search beyond their usual
-    # locations when an unexpected overlay moves them. Do not lower thresholds.
+    # Cancel/close may move with overlays; Back must stay in the upper-left ROI.
     templates = {
-        state: [replace(spec, search_roi=None,
+        state: [replace(spec, search_roi=spec.search_roi if state == "landing" else None,
                         threshold=max(spec.threshold or settings.threshold, 0.88))
                 for spec in settings.templates.get(state, [])]
         for state in ("download_prompt", "ad_close", "landing")
@@ -44,6 +45,7 @@ def recover_page(
     *,
     cause: str,
     blocked_state: str | None = None,
+    navigation_states: Collection[str] = LOGIC_1_STATES,
 ) -> Match:
     """Return only after a stable normal page, with one fixed recovery deadline.
 
@@ -56,7 +58,7 @@ def recover_page(
     stable = StableStateTracker(settings.consecutive_hits)
     next_action = time.monotonic()
     last_error = cause
-    allowed_resume = RESUME_STATES.difference({blocked_state})
+    allowed_resume = filter_navigation_states(RESUME_STATES, navigation_states).difference({blocked_state})
     reopen_attempts = 0
     reopening = False
     launcher = None
@@ -80,16 +82,18 @@ def recover_page(
                         launcher = adb.launcher_package()
                     if package == launcher:
                         stable.observe(None)
-                        if time.monotonic() >= next_action and reopen_attempts < 3:
+                        if time.monotonic() >= next_action and reopen_attempts < 1:
                             executor.verify_input_enabled()
                             # Confirm the desktop again immediately before launching.
                             if foreground_package(adb.foreground_window()) == launcher:
                                 reopen_attempts += 1
                                 reopening = True
                                 next_action = time.monotonic() + 5.0
-                                print(f"[恢复] 任务尚未完成，已回到模拟器桌面；第 {reopen_attempts}/3 次重新进入应用")
-                                allowed_resume = RESUME_STATES
-                                adb.launch_app(settings.package.strip())
+                                print("[恢复] 已回到模拟器桌面；强制停止后重新启动应用（仅重试一次）")
+                                allowed_resume = filter_navigation_states(RESUME_STATES, navigation_states)
+                                adb.restart_app(settings.package.strip())
+                        elif time.monotonic() >= next_action and reopen_attempts:
+                            raise RecoveryFailed("应用重启后再次失败，中断本次运行")
                         # BACK on the launcher cannot restore an app that crashed.
                         remaining = deadline - time.monotonic()
                         if remaining > 0:
@@ -100,7 +104,11 @@ def recover_page(
                 match = recognizer.best_match(screen, allowed_states=allowed_resume) if in_target else None
                 if time.monotonic() >= deadline:
                     break
-                if match is not None and (match.state == "limit" or exit_match is None):
+                # A normal page can have its own Back arrow. Only cancel/close
+                # overlays block a confirmed resume marker visible beneath them.
+                if match is not None and (
+                    match.state == "limit" or exit_match is None or exit_match.state == "landing"
+                ):
                     transition = stable.observe(match.state)
                     if transition is not None:
                         print(f"[恢复] 已回到流程页面：{match.state}")
@@ -113,8 +121,8 @@ def recover_page(
                                   if reopening and in_target and match is None else None)
                         if splash is not None:
                             action = Action(ActionKind.TAP, "重新进入应用：跳过开屏页", point=splash.center)
-                        elif exit_match is not None and exit_match.state != "landing":
-                            action = Action(ActionKind.TAP, "恢复：点击识别到的取消/叉", point=exit_match.center)
+                        elif exit_match is not None:
+                            action = Action(ActionKind.TAP, "恢复：点击识别到的取消/叉/左上角返回", point=exit_match.center)
                         else:
                             action = Action(ActionKind.BACK, "恢复：返回上一页")
                         # Foreign landing pages may require Back to reach the app.

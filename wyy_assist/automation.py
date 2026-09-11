@@ -1,30 +1,25 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass
+from collections.abc import Collection
+from dataclasses import dataclass, field
 from enum import Enum
 
 from .actions import ActionPlanner
-from .adb import AdbClient, AdbError, foreground_package
+from .adb import AdbClient, AdbError
 from .executor import ActionExecutor, ExecutionBlocked
 from .model import Settings
+from .navigation import (LOGIC_1_STATES, NAVIGATION_STATES, STARTUP_STATES,
+                         AD_ENTRY_STATES, filter_navigation_states)
+from .result import AutomationResult
 from .tracker import StableStateTracker
+from .timing import jitter_wait_seconds
 from .vision import StateRecognizer
 from .recovery import RecoveryFailed, RESUME_STATES, recover_page
 
 
-@dataclass(frozen=True)
-class AutomationResult:
-    reason: str
-    transitions: int
-
-
 RETRYABLE_STATES = frozenset(
     {
-        "home",
-        "free_listen",
-        "free_listen_icon",
-        "free_listen_page",
         "ready",
         "download_prompt",
         "landing",
@@ -32,14 +27,12 @@ RETRYABLE_STATES = frozenset(
     }
 )
 UNKNOWN_CENTER_FALLBACK_STATES = frozenset({"ready", "ad_interaction"})
-AD_ENTRY_STATES = frozenset({"ad", "ad_interaction", "ad_close", "download_prompt", "landing"})
-STARTUP_STATES = frozenset({"launcher_icon", "splash_skip"})
 
 
 def runtime_recognition_states(settings: Settings) -> set[str]:
-    """Main automation must never reuse launcher-only recognition states."""
+    """The shared ad loop only recognizes ready/ad/completion states."""
 
-    return set(settings.templates).difference(STARTUP_STATES)
+    return set(settings.templates).difference(STARTUP_STATES | NAVIGATION_STATES)
 
 
 class AdCyclePhase(str, Enum):
@@ -61,6 +54,8 @@ class AdCycleTimer:
     armed_at: float | None = None
     entered_at: float | None = None
     clicked_at: float | None = None
+    pre_click_wait_seconds: float = field(init=False, default=0.0)
+    post_click_wait_seconds: float = field(init=False, default=0.0)
 
     def arm(self, now: float) -> None:
         self.phase = AdCyclePhase.AWAITING_ENTRY
@@ -74,16 +69,21 @@ class AdCycleTimer:
         self.entered_at = None
         self.clicked_at = None
 
+    def _enter(self, now: float) -> None:
+        # Sample once per actual entry, never on every screenshot or retry.
+        self.pre_click_wait_seconds = jitter_wait_seconds(self.pre_click_seconds)
+        self.post_click_wait_seconds = jitter_wait_seconds(self.post_click_seconds)
+        self.phase = AdCyclePhase.PRE_CLICK
+        self.entered_at = now
+
     def observe_screen(self, state: str | None, now: float) -> str | None:
         if self.phase is AdCyclePhase.IDLE and state in AD_ENTRY_STATES:
-            self.phase = AdCyclePhase.PRE_CLICK
-            self.entered_at = now
+            self._enter(now)
             return "entered"
         if self.phase is not AdCyclePhase.AWAITING_ENTRY:
             return None
         if state is None or state in AD_ENTRY_STATES:
-            self.phase = AdCyclePhase.PRE_CLICK
-            self.entered_at = now
+            self._enter(now)
             return "entered"
         if (
             state == "ready"
@@ -98,7 +98,7 @@ class AdCycleTimer:
         return (
             self.phase is AdCyclePhase.PRE_CLICK
             and self.entered_at is not None
-            and now - self.entered_at >= self.pre_click_seconds
+            and now >= self.entered_at + self.pre_click_wait_seconds
         )
 
     def mark_interaction(self, now: float) -> None:
@@ -111,7 +111,7 @@ class AdCycleTimer:
         if (
             self.phase is AdCyclePhase.POST_CLICK
             and self.clicked_at is not None
-            and now - self.clicked_at >= self.post_click_seconds
+            and now >= self.clicked_at + self.post_click_wait_seconds
         ):
             self.phase = AdCyclePhase.EXIT
             return True
@@ -180,110 +180,30 @@ class StateRetryPolicy:
         return elapsed >= self.non_retryable_stall_seconds
 
 
-def preview_once(settings: Settings, adb: AdbClient) -> AutomationResult:
+def preview_once(
+    settings: Settings, adb: AdbClient, *, steps: tuple[str, ...] = ("my_tab", "menu_button", "free_listen_vip"),
+) -> AutomationResult:
+    from .entry_navigation import EntryActionPlanner, find_entry_match
+
     screen = adb.screenshot()
-    match = StateRecognizer(settings).best_match(screen)
+    recognizer = StateRecognizer(settings)
+    match = find_entry_match(recognizer, screen, steps)
+    if match is None:
+        match = recognizer.best_match(
+            screen, allowed_states=filter_navigation_states(settings.templates, steps)
+        )
     if match is None:
         return AutomationResult("unknown", 0)
-    planner = ActionPlanner(settings)
+    planner = EntryActionPlanner(settings, steps) if match.state in steps else ActionPlanner(settings)
     executor = ActionExecutor(settings, adb, execute_requested=False)
     executor.run_all(planner.plan(match, (screen.shape[1], screen.shape[0])))
     return AutomationResult(match.state, 1)
 
 
-def run_startup_navigation(
-    settings: Settings,
-    adb: AdbClient,
-    *,
-    execute_requested: bool,
+def run_live(
+    settings: Settings, adb: AdbClient, *, execute_requested: bool,
+    navigation_states: Collection[str] = LOGIC_1_STATES,
 ) -> AutomationResult:
-    """Open the test app from the launcher and dismiss an optional splash page."""
-
-    executor = ActionExecutor(settings, adb, execute_requested=execute_requested)
-    executor.verify_input_enabled()
-    recognizer = StateRecognizer(settings)
-    planner = ActionPlanner(settings)
-    tracker = StableStateTracker(settings.consecutive_hits)
-    deadline = time.monotonic() + settings.startup_navigation_timeout_seconds
-    transitions = 0
-    action_state: str | None = None
-    action_count = 0
-    last_action_at: float | None = None
-    unknown_since: float | None = None
-    try:
-        foreground = adb.foreground_window()
-    except AdbError:
-        # Recognition can still launch the app when dumpsys is temporarily
-        # unavailable during Android startup.
-        foreground = ""
-    app_launch_requested = bool(
-        settings.package.strip()
-        and settings.package.strip() == foreground_package(foreground)
-    )
-    if app_launch_requested:
-        print("[启动] 目标应用已在前台，直接接管当前页面")
-
-    while time.monotonic() < deadline:
-        screen = adb.screenshot()
-        # The home marker is cheap to match and ends startup immediately. Before
-        # the app icon is clicked (or is known to be foreground), scan only the
-        # launcher icon so launcher search widgets cannot become click targets.
-        match = recognizer.best_match(screen, allowed_states={"limit", "home"})
-        if match is None:
-            if app_launch_requested:
-                # Restore the old hand-off behavior for scripts started while
-                # the app is already on splash, a business page, or an ad page.
-                startup_states = runtime_recognition_states(settings)
-                startup_states.add("splash_skip")
-            else:
-                startup_states = {"launcher_icon"}
-            match = recognizer.best_match(screen, allowed_states=startup_states)
-        if match is None and app_launch_requested:
-            if unknown_since is None:
-                unknown_since = time.monotonic()
-            if time.monotonic() - unknown_since >= 3.0:
-                recovered = recover_page(settings, adb, recognizer, executor,
-                                         cause="应用启动后页面未识别")
-                return AutomationResult(f"startup-{recovered.state}", transitions)
-        else:
-            unknown_since = None
-        transition = tracker.observe(match.state if match is not None else None)
-        if match is None or transition is None:
-            time.sleep(settings.poll_interval_seconds)
-            continue
-
-        if transition.changed:
-            transitions += 1
-            action_state = match.state
-            action_count = 0
-            last_action_at = None
-
-        if match.state not in STARTUP_STATES:
-            print(f"[启动] 已进入原状态机页面: {match.state}")
-            return AutomationResult(f"startup-{match.state}", transitions)
-
-        now = time.monotonic()
-        retry_due = last_action_at is None or now - last_action_at >= 3.0
-        if retry_due and action_count < 3:
-            actions = planner.plan(match, (screen.shape[1], screen.shape[0]))
-            executor.run_all(actions, require_target_foreground=False)
-            if match.state == "launcher_icon":
-                app_launch_requested = True
-            action_state = match.state
-            action_count += 1
-            last_action_at = time.monotonic()
-        elif action_state == match.state and action_count >= 3 and retry_due:
-            recovered = recover_page(settings, adb, recognizer, executor,
-                                     cause=f"启动页面 {match.state} 连续点击 3 次后仍未变化")
-            return AutomationResult(f"startup-{recovered.state}", transitions)
-
-        time.sleep(settings.poll_interval_seconds)
-
-    recovered = recover_page(settings, adb, recognizer, executor, cause="启动导航超时")
-    return AutomationResult(f"startup-{recovered.state}", transitions)
-
-
-def run_live(settings: Settings, adb: AdbClient, *, execute_requested: bool) -> AutomationResult:
     transitions = 0
     recoveries_without_progress = 0
     while transitions < 100:
@@ -302,9 +222,9 @@ def run_live(settings: Settings, adb: AdbClient, *, execute_requested: bool) -> 
             # early Back or close while a previously started wait is locked.
             wait_until = None
             if cycle.phase is AdCyclePhase.PRE_CLICK and cycle.entered_at is not None:
-                wait_until = cycle.entered_at + cycle.pre_click_seconds
+                wait_until = cycle.entered_at + cycle.pre_click_wait_seconds
             elif cycle.phase is AdCyclePhase.POST_CLICK and cycle.clicked_at is not None:
-                wait_until = cycle.clicked_at + cycle.post_click_seconds
+                wait_until = cycle.clicked_at + cycle.post_click_wait_seconds
             if wait_until is not None:
                 remaining = wait_until - time.monotonic()
                 if remaining > 0:
@@ -316,10 +236,13 @@ def run_live(settings: Settings, adb: AdbClient, *, execute_requested: bool) -> 
         recovered = recover_page(
             settings, adb, StateRecognizer(settings),
             ActionExecutor(settings, adb, execute_requested=execute_requested),
-            cause=cause, blocked_state=blocked,
+            cause=cause, blocked_state=blocked, navigation_states=navigation_states,
         )
         if recovered.state == "limit":
             return AutomationResult("limit", transitions)
+        if recovered.state in navigation_states:
+            # start.py owns route ordering, including a recovered entry page.
+            return AutomationResult("navigation-required", transitions)
     raise RecoveryFailed("本次运行失败：状态转换次数达到限制，仍未识别到 limit")
 
 
@@ -344,19 +267,6 @@ def _run_live_attempt(
     while transitions < 100:
         screen = adb.screenshot()
         match = recognizer.best_match(screen, allowed_states=runtime_states)
-        if (
-            match is not None
-            and match.state == "home"
-            and retry_policy.state == "home"
-            and retry_policy.attempts >= 1
-        ):
-            fallback = recognizer.best_match(
-                screen,
-                allowed_states={"free_listen_icon"},
-            )
-            if fallback is not None:
-                print("[导航] 顶部频道滑动后仍停留在推荐页，改用右上角“免”入口")
-                match = fallback
         now = time.monotonic()
         state = match.state if match is not None else None
 
@@ -371,7 +281,7 @@ def _run_live_attempt(
         if timer_event == "entered":
             print(
                 f"[计时] 已进入广告页；锁定退出动作，先等待 "
-                f"{settings.minimum_ad_seconds:.1f} 秒"
+                f"{ad_cycle.pre_click_wait_seconds:.1f} 秒"
             )
         elif timer_event == "entry-retry":
             print("[计时] 广告页未出现，允许重新点击入口")
@@ -384,7 +294,7 @@ def _run_live_attempt(
                 ad_cycle.mark_interaction(time.monotonic())
                 print(
                     f"[计时] 已完成互动点击；继续锁定退出动作 "
-                    f"{settings.ad_post_click_wait_seconds:.1f} 秒"
+                    f"{ad_cycle.post_click_wait_seconds:.1f} 秒"
                 )
             time.sleep(settings.poll_interval_seconds)
             continue

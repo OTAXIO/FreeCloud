@@ -11,6 +11,7 @@ from .adb import AdbClient, AdbError
 from .calibrate import calibrate_template
 from .config import load_settings
 from .model import VALID_STATES
+from .navigation import filter_navigation_states
 from .monitor import run_monitor
 
 
@@ -63,6 +64,8 @@ def _doctor(adb: AdbClient) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    from start import navigation_steps
+
     args = _parser().parse_args(argv)
     try:
         settings = load_settings(args.config)
@@ -84,7 +87,9 @@ def main(argv: list[str] | None = None) -> int:
             image = cv2.imdecode(np.fromfile(path, dtype=np.uint8), cv2.IMREAD_COLOR)
             if image is None:
                 raise ValueError(f"无法读取图片: {path}")
-            match = StateRecognizer(settings).best_match(image)
+            match = StateRecognizer(settings).best_match(
+                image, allowed_states=filter_navigation_states(settings.templates, navigation_steps())
+            )
             if match is None:
                 print("未识别到已配置状态。")
                 return 1
@@ -96,13 +101,9 @@ def main(argv: list[str] | None = None) -> int:
 
         adb.ensure_device()
         if args.command == "automate":
-            from .automation import preview_once, run_live
+            from .automation import preview_once
 
-            result = (
-                run_live(settings, adb, execute_requested=True)
-                if args.execute
-                else preview_once(settings, adb)
-            )
+            result = preview_once(settings, adb, steps=navigation_steps())
             print(f"动作状态机结束: {result.reason}; 状态转换 {result.transitions} 次")
             return 0
         if args.command == "screenshot":
@@ -120,7 +121,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "monitor":
             if args.open_link:
                 adb.open_deep_link(settings.deep_link, settings.package)
-            result = run_monitor(settings, adb)
+            result = run_monitor(settings, adb, navigation_states=navigation_steps())
             print(
                 f"监控结束: {result.reason}; 广告 {result.ad_count} 次，"
                 f"最终奖励 {result.success_count} 次"
@@ -129,7 +130,9 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "recognize":
             from .vision import StateRecognizer
 
-            match = StateRecognizer(settings).best_match(adb.screenshot())
+            match = StateRecognizer(settings).best_match(
+                adb.screenshot(), allowed_states=filter_navigation_states(settings.templates, navigation_steps())
+            )
             if match is None:
                 print("未识别到已配置状态。")
                 return 1

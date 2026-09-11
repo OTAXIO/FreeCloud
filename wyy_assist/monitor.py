@@ -1,16 +1,21 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Collection
 from dataclasses import dataclass
 from datetime import datetime
 
 from .adb import AdbClient
 from .model import Settings
+from .navigation import LOGIC_1_STATES, filter_navigation_states
 from .tracker import StableStateTracker, Transition
 from .vision import StateRecognizer
 
 
 STATE_MESSAGES = {
+    "my_tab": "[逻辑1] 识别到底部‘我的’入口。",
+    "menu_button": "[逻辑1] 识别到三横杠菜单。",
+    "free_listen_vip": "[逻辑1] 识别到免费听VIP歌曲入口。",
     "home": "识别到首页推荐频道；顶部频道需要继续向右浏览。",
     "free_listen": "识别到“免费听”频道标签。",
     "ready": "奖励页面已就绪；请在模拟器中手动发起一次观看。",
@@ -42,7 +47,9 @@ def _announce_transition(transition: Transition) -> None:
     )
 
 
-def run_monitor(settings: Settings, adb: AdbClient) -> MonitorResult:
+def run_monitor(
+    settings: Settings, adb: AdbClient, *, navigation_states: Collection[str] = LOGIC_1_STATES,
+) -> MonitorResult:
     recognizer = StateRecognizer(settings)
     if not recognizer.templates:
         raise ValueError("尚未校准任何模板，请先运行 calibrate")
@@ -54,7 +61,9 @@ def run_monitor(settings: Settings, adb: AdbClient) -> MonitorResult:
 
     print("开始监控；按 Ctrl+C 停止。工具不会点击广告界面。")
     while True:
-        match = recognizer.best_match(adb.screenshot())
+        match = recognizer.best_match(
+            adb.screenshot(), allowed_states=filter_navigation_states(settings.templates, navigation_states)
+        )
         now = time.monotonic()
         state = match.state if match else None
         transition = tracker.observe(state)
